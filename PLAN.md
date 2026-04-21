@@ -1,15 +1,20 @@
 # Plan: Videnskabsmaskinen — fuld AWS-arkitektur
 
-## Kontekst
+## Status (opdateret 2026-04-21)
 
-Vi har et eksisterende redaktørinterface (`kunder/science-media-company/demo-artikel-review/index.html`) bygget i vanilla HTML/JS med hardcodede artikler og ingen backend. Målet er at erstatte det med en reel applikation, der:
+### Færdigt
+- ✅ Backend: Lambda + S3 (`videnskabsmaskinen-articles`) + API Gateway deployet via AWS SAM
+- ✅ EventBridge: Crawler kører automatisk hver 6. time
+- ✅ Frontend: Vite + TypeScript deployet på Amplify (`https://main.d1w9o0e40lcutv.amplifyapp.com/`)
+- ✅ Crawler: Videnskab.dk (HTML) kører, 16 artikler i inbox
+- ✅ GitHub: Auto-deploy ved push til `main`
 
-1. Crawler videnskabskilder automatisk og gemmer artikler i S3
-2. Viser artiklerne i et redaktørinterface der kalder et AWS API
-3. Lader redaktøren ignorere eller beholde artikler (med vinkel)
-4. Ved "behold": sender artiklen til Bonzai AI → formaterer som HTML → publisher til WordPress som draft
-
-Der eksisterer allerede en fungerende prototype i `/Users/jenshjerrildpoder/Python-Maskiner/nyhedscrawler` som vi genbruger store dele af.
+### Mangler
+- ⬜ RSS-understøttelse i crawler (se nedenfor)
+- ⬜ Kildeliste defineret og testet
+- ⬜ Bonzai API credentials sat i Lambda env vars
+- ⬜ WordPress credentials sat i Lambda env vars
+- ⬜ Test af fuldt process-article flow (Bonzai → WordPress)
 
 ---
 
@@ -18,163 +23,75 @@ Der eksisterer allerede en fungerende prototype i `/Users/jenshjerrildpoder/Pyth
 ```
 EventBridge (scheduler, hver 6. time)
     ↓
-Lambda: crawler
+Lambda: videnskabsmaskinen-api
     ↓ skriver JSON
 S3 bucket: videnskabsmaskinen-articles
-    articles/inbox/<uuid>.json
-    articles/reviewed/<uuid>.json
     articles/sources.json
+    articles/inbox/<sha1>.json
+    articles/reviewed/<sha1>.json
     ↑ læser/skriver
-Lambda: articles-api
+API Gateway: https://30bw0tkv7k.execute-api.eu-west-1.amazonaws.com/prod
     ↑ kalder
-API Gateway (HTTP API)
-    ↑ kalder
-Frontend (Vite + TypeScript)
-    → hosted på AWS Amplify (auto-deploy fra GitHub main)
+Frontend: https://main.d1w9o0e40lcutv.amplifyapp.com/
+    → auto-deploy fra GitHub main via Amplify
 
-"Behold"-flow:
-Frontend → Lambda: process-article → Bonzai API → WordPress REST API
+"Send"-flow:
+Frontend → POST /articles/{id}/process → Bonzai API → WordPress REST API (draft)
 ```
 
 ---
 
-## Mappestruktur i projektet
+## Næste: RSS-understøttelse i crawler
 
-```
-videnskabsmaskinen/
-  frontend/
-    src/
-      main.ts
-      api.ts          ← wrapper til API Gateway
-      types.ts        ← Article, Status (kopieres/tilpasses fra prototype)
-      components/
-        inbox.ts
-        archive.ts
-    index.html        ← kopiér design fra demo-artikel-review/index.html
-    vite.config.ts
-    tsconfig.json
-    package.json
+### Hvorfor RSS
+- Stabil struktur — ingen CSS-selektorer der går i stykker ved redesign
+- Titel, beskrivelse, URL og dato ud af boksen
+- De fleste WordPress-sites har `/feed/` som standard (inkl. Poder)
+- Bruges til kilder der har RSS — HTML-crawleren beholdes til resten
 
-  backend/
-    src/
-      handler.ts                    ← Lambda entry point (tilpasses fra prototype)
-      types.ts                      ← kopieres fra prototype, tilføj nye felter
-      s3Store.ts                    ← kopieres fra prototype, tilpas til individuelle filer
-      crawler/
-        crawlOneSource.ts           ← kopieres direkte fra prototype (uændret)
-      process/
-        bonzai.ts                   ← ny: Bonzai API-kald (OpenAI-kompatibel)
-        wordpress.ts                ← ny: WordPress REST API draft-publicering
-    sources.json                    ← kopieres fra prototype, skift til videnskabskilder
-    package.json
-    tsconfig.json
+### Implementering
+Tilføj `type: "rss" | "html"` i `sources.json` per kilde.
 
-  infrastructure/
-    template.yaml                   ← AWS SAM template
-```
+Ny fil: `backend/src/crawler/crawlRssSource.ts`
+- Henter RSS-feed med `fetch()`
+- Parser XML med en lille regex/string-parser (ingen ekstra dependency)
+- Returnerer samme `Article`-array som `crawlOneSource`
 
----
+`handler.ts` → `runCrawl()` vælger parser baseret på `source.type`.
 
-## Hvad genbruges fra prototypen
-
-| Fil i prototype | Destination | Ændringer |
+### Kilder (TBD — defineres løbende)
+| Kilde | Type | URL |
 |---|---|---|
-| `backend/src/crawler/crawlOneSource.ts` | `backend/src/crawler/crawlOneSource.ts` | Ingen |
-| `backend/src/s3Store.ts` | `backend/src/s3Store.ts` | Tilpas til individuelle filer (ikke én stor items.json) |
-| `backend/src/types.ts` | `backend/src/types.ts` | Tilføj `angle`, `wordpressPostId`, `publishedAt` |
-| `backend/src/handler.ts` | `backend/src/handler.ts` | Udvid med process-article endpoint |
-| `backend/sources.json` | `backend/sources.json` | Skift til videnskabskilder (TBD) |
-| `backend/package.json` | `backend/package.json` | Tilføj openai-sdk til Bonzai |
+| Videnskab.dk | HTML | `https://videnskab.dk/seneste-nyt/` |
+| Poder (WordPress) | RSS | `https://poder.dk/feed/` |
+| Øvrige | TBD | TBD |
 
 ---
 
-## S3-datastruktur
+## Credentials der mangler
 
-Bucket: `videnskabsmaskinen-articles`
-
-```
-articles/sources.json              ← kilde-konfiguration
-articles/inbox/<uuid>.json         ← nye artikler fra crawler
-articles/reviewed/<uuid>.json      ← gennemgåede artikler
+Sættes som Lambda environment variables:
+```bash
+aws lambda update-function-configuration \
+  --function-name videnskabsmaskinen-api \
+  --region eu-west-1 \
+  --environment "Variables={BONZAI_BASE_URL=...,BONZAI_API_KEY=...,BONZAI_MODEL=...,WORDPRESS_URL=...,WORDPRESS_USER=...,WORDPRESS_APP_PASSWORD=...}"
 ```
 
-Article JSON-schema (udvidelse af prototype-typen):
-```json
-{
-  "id": "sha1-af-url",
-  "customerId": "science-media-company",
-  "sourceId": "kilde-1",
-  "title": "Titel",
-  "url": "https://...",
-  "teaser": "Kort beskrivelse",
-  "discoveredAt": "ISO8601",
-  "status": "new" | "ignored" | "processing" | "published",
-  "angle": "",
-  "reviewedAt": null,
-  "publishedAt": null,
-  "wordpressPostId": null
-}
-```
+| Variabel | Beskrivelse |
+|---|---|
+| `BONZAI_BASE_URL` | Base URL til Bonzai API |
+| `BONZAI_API_KEY` | API-nøgle |
+| `BONZAI_MODEL` | Model-navn (fx `gpt-4o`) |
+| `WORDPRESS_URL` | WordPress site URL (fx `https://poder.dk`) |
+| `WORDPRESS_USER` | WordPress brugernavn |
+| `WORDPRESS_APP_PASSWORD` | WordPress application password |
 
 ---
 
-## Lambda-funktioner
+## Implementeringsrækkefølge (resterende)
 
-### 1. `crawler` (EventBridge trigger, hver 6. time)
-- Genbruger `crawlOneSource.ts` fra prototype
-- Læser kildeliste fra `articles/sources.json` i S3
-- Deduplication: springer artikler over hvis ID allerede findes i inbox eller reviewed
-- Gemmer nye artikler som individuelle filer: `articles/inbox/<id>.json`
-
-### 2. `articles-api` (API Gateway)
-- `GET /articles?status=inbox` → lister og returnerer alle filer i `articles/inbox/`
-- `GET /articles?status=reviewed` → lister `articles/reviewed/`
-- `PATCH /articles/{id}` med `{ status, angle? }` → flytter fil mellem mapper, opdaterer felter
-- `POST /crawl` → trigger manuel crawl (til test)
-
-### 3. `process-article` (API Gateway)
-- `POST /articles/{id}/process` med `{ angle }`
-- Henter artikel fra S3
-- Kalder Bonzai via OpenAI-kompatibel SDK (base URL + model sættes som Lambda env vars)
-- Prompt: skriv dansk artikel baseret på titel, teaser, kilde-URL og redaktørens vinkel
-- Formaterer svar som HTML
-- Poster til WordPress: `POST /wp-json/wp/v2/posts` med Basic Auth (application password)
-- Opdaterer artikel i S3: `status: "published"`, `wordpressPostId`, `publishedAt`
-
----
-
-## Frontend (Vite + TypeScript)
-
-Erstatter demo-artikel-review. Kopierer det visuelle design direkte.
-
-- Henter artikler via `GET /articles?status=inbox` og `?status=reviewed`
-- `ignoreArticle(id)` → `PATCH /articles/{id}` med `{ status: "ignored" }`
-- `sendArticle(id, angle)` → `POST /articles/{id}/process` med `{ angle }`
-- Polling eller manuel refresh-knap (ingen websockets)
-- Env var: `VITE_API_URL` sat i Amplify
-
----
-
-## Implementeringsrækkefølge
-
-1. **Backend fundament**: Kopier og tilpas prototype → S3-struktur med individuelle filer + articles-api Lambda + API Gateway (SAM template)
-2. **Frontend migration**: Vite + TypeScript setup, kopiér eksisterende design, kobl til API
-3. **Crawler**: Tilpas til videnskabskilder, deploy med EventBridge schedule
-4. **Process-article**: Bonzai-integration + WordPress-publicering
-5. **Amplify deploy**: Kobl GitHub repo, sæt env vars (API URL, Bonzai key, WordPress credentials)
-
----
-
-## Åbne punkter (non-blocking)
-- Kildeliste til crawleren — starter med én placeholder-kilde, tilføjer løbende
-- Bonzai base URL og model-navn — indsættes som Lambda env vars
-- WordPress site URL og application password — indsættes som Lambda env vars
-
----
-
-## Verificering
-
-- Crawler: Kør `POST /crawl` manuelt → tjek at JSON dukker op i S3 inbox
-- API: `curl GET /articles?status=inbox` returnerer array
-- Frontend: Inbox viser artikler, knapper opdaterer S3
-- Process: Klik "Send" → draft-post dukker op i WordPress
+1. **RSS-crawler**: `crawlRssSource.ts` + `type`-felt i `sources.json`
+2. **Kildeliste**: Definer og test kilder med rigtige selektorer/RSS-URLs
+3. **Credentials**: Sæt Bonzai + WordPress env vars i Lambda
+4. **Test fuldt flow**: Crawl → inbox → Send → WordPress draft
