@@ -1,0 +1,38 @@
+{
+  "updatedAt": null,
+  "customers": [
+    { "customerId": "science-media-company", "name": "Science Media Company" }
+  ],
+  "sources": [
+    {
+      "sourceId": "videnskabdk-1",
+      "customerId": "science-media-company",
+      "name": "Videnskab.dk — Seneste",
+      "startUrl": "https://videnskab.dk/seneste/",
+      "maxItems": 30,
+      "enabled": true,
+      "selectors": {
+        "item": "article",
+        "title": "h2, h3",
+        "url": "a",
+        "urlAttribute": "href",
+        "teaser": "p"
+      }
+    },
+    {
+      "sourceId": "sciencedaily-1",
+      "customerId": "science-media-company",
+      "name": "ScienceDaily — Top News",
+      "startUrl": "https://www.sciencedaily.com/news/top/science/",
+      "maxItems": 30,
+      "enabled": false,
+      "selectors": {
+        "item": "div.latest-head",
+        "title": "a",
+        "url": "a",
+        "urlAttribute": "href",
+        "teaser": ""
+      }
+    }
+  ]
+}

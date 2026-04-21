@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Videnskabsmaskinen — crawler, API og artikel-processor
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 60
+    MemorySize: 256
+    Environment:
+      Variables:
+        BUCKET: !Ref ArticlesBucket
+
+Resources:
+
+  # ── S3 ──────────────────────────────────────────────────────────────────────
+  ArticlesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: videnskabsmaskinen-articles
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ['*']
+            AllowedMethods: [GET]
+            AllowedHeaders: ['*']
+
+  # ── Lambda ──────────────────────────────────────────────────────────────────
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: videnskabsmaskinen-api
+      Handler: dist/handler.handler
+      CodeUri: ../backend/
+      Description: Håndterer alle API-kald og artikel-behandling
+      Environment:
+        Variables:
+          BONZAI_BASE_URL: '{{resolve:ssm:/videnskabsmaskinen/bonzai/base-url}}'
+          BONZAI_API_KEY: '{{resolve:ssm:/videnskabsmaskinen/bonzai/api-key}}'
+          BONZAI_MODEL: '{{resolve:ssm:/videnskabsmaskinen/bonzai/model}}'
+          WORDPRESS_URL: '{{resolve:ssm:/videnskabsmaskinen/wordpress/url}}'
+          WORDPRESS_USER: '{{resolve:ssm:/videnskabsmaskinen/wordpress/user}}'
+          WORDPRESS_APP_PASSWORD: '{{resolve:ssm:/videnskabsmaskinen/wordpress/app-password}}'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+        ScheduledCrawl:
+          Type: Schedule
+          Properties:
+            Schedule: rate(6 hours)
+            Description: Kør crawler automatisk hver 6. time
+            Enabled: true
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref ArticlesBucket
+
+  # ── API Gateway ──────────────────────────────────────────────────────────────
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway URL
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+  BucketName:
+    Description: S3 bucket navn
+    Value: !Ref ArticlesBucket
