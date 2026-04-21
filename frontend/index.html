@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Artikeloverblik – Science Media Company</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --accent: #4ade80;
+      --accent-dim: rgba(74, 222, 128, 0.15);
+      --accent-mid: rgba(74, 222, 128, 0.35);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 13pt; }
+    @media (max-width: 736px) { html { font-size: 11pt; } }
+
+    body {
+      background-color: #1b1f22;
+      color: #ffffff;
+      font-family: "Source Sans Pro", sans-serif;
+      font-weight: 300;
+      font-size: 1rem;
+      line-height: 1.65;
+      min-height: 100vh;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+      border-bottom: dotted 1px rgba(255,255,255,0.5);
+      transition: border-color 0.2s ease-in-out;
+    }
+    a:hover { border-bottom-color: transparent; }
+
+    /* ── HEADER ── */
+    #site-header {
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      padding: 0 2rem;
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background-color: rgba(27,31,34,0.97);
+      backdrop-filter: blur(6px);
+      z-index: 10;
+      height: 4rem;
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+    }
+
+    .header-logo {
+      width: 2.2rem;
+      height: 2.2rem;
+      border: 1px solid #ffffff;
+      border-radius: 70%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .header-logo svg { width: 1.2rem; height: 1.2rem; opacity: 0.8; }
+
+    .header-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.2rem;
+      line-height: 1.3;
+    }
+    .header-subtitle {
+      font-size: 0.6rem;
+      opacity: 0.45;
+      text-transform: uppercase;
+      letter-spacing: 0.15rem;
+    }
+
+    /* ── TOP NAV ── */
+    .header-nav {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0 1.5rem;
+      font-size: 0.72rem;
+      font-weight: 300;
+      text-transform: uppercase;
+      letter-spacing: 0.2rem;
+      border-bottom: none;
+      opacity: 0.45;
+      border-bottom: 2px solid transparent;
+      transition: opacity 0.2s, border-color 0.2s;
+      cursor: pointer;
+    }
+    .nav-link:hover { opacity: 0.8; border-bottom-color: rgba(255,255,255,0.3); }
+    .nav-link.active { opacity: 1; border-bottom-color: var(--accent); font-weight: 600; }
+
+    .nav-badge {
+      background-color: rgba(255,255,255,0.15);
+      color: #ffffff;
+      font-size: 0.6rem;
+      font-weight: 600;
+      letter-spacing: 0;
+      padding: 0.1rem 0.45rem;
+      border-radius: 10px;
+      min-width: 1.4rem;
+      text-align: center;
+      transition: background-color 0.2s;
+    }
+    .nav-link.active .nav-badge { background-color: var(--accent-mid); color: var(--accent); }
+
+    /* ── MAIN ── */
+    #main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 2.5rem 2rem 5rem;
+    }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .section-heading {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.25rem;
+      opacity: 0.4;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* ── ARTIKEL-KORT (inbox) ── */
+    .article-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .article-card {
+      background-color: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      transition: border-color 0.2s ease;
+    }
+    .article-card:hover { border-color: rgba(255,255,255,0.2); }
+
+    .article-card.removing {
+      animation: collapseOut 0.35s ease forwards;
+    }
+
+    @keyframes collapseOut {
+      0%   { opacity: 1; max-height: 400px; }
+      60%  { opacity: 0; }
+      100% { opacity: 0; max-height: 0; margin: 0; padding: 0; border-width: 0; }
+    }
+
+    .card-inner { display: flex; }
+
+    .card-image {
+      width: 160px;
+      min-width: 160px;
+      height: 120px;
+      background-color: rgba(255,255,255,0.03);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border-right: 1px solid rgba(255,255,255,0.07);
+    }
+    .card-image svg { width: 2rem; height: 2rem; opacity: 0.15; }
+
+    @media (max-width: 600px) { .card-image { display: none; } }
+
+    .card-content {
+      padding: 1.25rem 1.5rem;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .card-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.09rem;
+      line-height: 1.4;
+      margin-bottom: 0.5rem;
+    }
+
+    .card-description {
+      font-size: 0.85rem;
+      line-height: 1.6;
+      opacity: 0.7;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-source-link {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15rem;
+      opacity: 0.4;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      border-bottom: none;
+      transition: opacity 0.2s;
+    }
+    .card-source-link:hover { opacity: 0.75; border-bottom: none; }
+    .card-source-link svg { width: 0.6rem; height: 0.6rem; }
+
+    .card-actions {
+      padding: 0 1.5rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    /* ── KNAPPER ── */
+    button {
+      appearance: none;
+      cursor: pointer;
+      font-family: "Source Sans Pro", sans-serif;
+      font-weight: 300;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2rem;
+      border-radius: 4px;
+      border: 0;
+      height: 2.5rem;
+      padding: 0 1.25rem;
+      transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s;
+      white-space: nowrap;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-keep {
+      background-color: var(--accent);
+      color: #1b1f22;
+      font-weight: 600;
+    }
+    .btn-keep:hover:not(:disabled) { background-color: #6ee898; }
+    .btn-keep:active:not(:disabled) { background-color: #38c96b; }
+
+    .btn-ignore {
+      background-color: transparent;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.55);
+    }
+    .btn-ignore:hover:not(:disabled) {
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.65);
+      color: #ffffff;
+      background-color: rgba(255,255,255,0.04);
+    }
+
+    .btn-cancel {
+      background-color: transparent;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.4);
+      font-size: 0.68rem;
+    }
+    .btn-cancel:hover:not(:disabled) {
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55);
+      color: #ffffff;
+    }
+
+    .btn-send {
+      background-color: var(--accent);
+      color: #1b1f22;
+      font-weight: 600;
+    }
+    .btn-send:hover:not(:disabled) { background-color: #6ee898; }
+
+    .btn-crawl {
+      background-color: transparent;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.5);
+      font-size: 0.62rem;
+      height: 2rem;
+      padding: 0 0.9rem;
+    }
+    .btn-crawl:hover:not(:disabled) {
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5);
+      color: #ffffff;
+    }
+
+    /* ── LOADING ── */
+    .loading-pulse {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2rem;
+      opacity: 0.3;
+      padding: 2rem 0;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50%       { opacity: 0.7; }
+    }
+
+    /* ── VINKELZONE ── */
+    .angle-zone {
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-height 0.35s ease, opacity 0.3s ease;
+    }
+    .angle-zone.open {
+      max-height: 280px;
+      opacity: 1;
+    }
+
+    .angle-zone-inner {
+      padding: 1rem 1.5rem 1.25rem;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .angle-zone label {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2rem;
+      opacity: 0.45;
+      display: block;
+      margin-bottom: 0.4rem;
+    }
+
+    .angle-wrapper { flex: 1; }
+
+    .angle-input {
+      width: 100%;
+      background-color: transparent;
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 4px;
+      color: #ffffff;
+      font-family: "Source Sans Pro", sans-serif;
+      font-weight: 300;
+      font-size: 0.85rem;
+      padding: 0.5rem 0.75rem;
+      resize: none;
+      line-height: 1.55;
+      transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+    }
+    .angle-input::placeholder { color: rgba(255,255,255,0.28); }
+    .angle-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      background-color: var(--accent-dim);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .angle-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      flex-shrink: 0;
+      align-self: flex-end;
+    }
+
+    /* ── DONE STATE ── */
+    #done-message {
+      display: none;
+      text-align: center;
+      padding: 5rem 2rem;
+    }
+    #done-message.visible { display: block; }
+
+    .done-icon {
+      width: 3.5rem;
+      height: 3.5rem;
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 70%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.75rem;
+    }
+    .done-icon svg { width: 1.4rem; height: 1.4rem; opacity: 0.55; }
+
+    .done-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4rem;
+      margin-bottom: 0.75rem;
+    }
+    .done-text {
+      font-size: 0.8rem;
+      opacity: 0.4;
+      text-transform: uppercase;
+      letter-spacing: 0.15rem;
+    }
+
+    /* ── ARKIV-LISTE ── */
+    .archive-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .archive-empty {
+      font-size: 0.8rem;
+      opacity: 0.35;
+      text-transform: uppercase;
+      letter-spacing: 0.15rem;
+      padding: 3rem 0;
+      text-align: center;
+    }
+
+    .archive-card {
+      background-color: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 4px;
+      padding: 0.9rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      transition: border-color 0.2s;
+      animation: fadeIn 0.25s ease;
+    }
+    .archive-card:hover { border-color: rgba(255,255,255,0.15); }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-3px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .archive-badge {
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12rem;
+      font-weight: 600;
+      padding: 0.18rem 0.5rem;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .archive-badge.kept {
+      background-color: var(--accent-dim);
+      color: var(--accent);
+    }
+    .archive-badge.ignored {
+      background-color: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.3);
+    }
+    .archive-badge.processing {
+      background-color: rgba(250,204,21,0.15);
+      color: #facc15;
+    }
+
+    .archive-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .archive-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07rem;
+      opacity: 0.6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .archive-angle {
+      font-size: 0.78rem;
+      opacity: 0.35;
+      font-style: italic;
+      margin-top: 0.15rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn-return {
+      background-color: transparent;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.45);
+      font-size: 0.65rem;
+      height: 2.1rem;
+      padding: 0 0.9rem;
+      flex-shrink: 0;
+    }
+    .btn-return:hover {
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6);
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+
+  <header id="site-header">
+    <div class="header-brand">
+      <div class="header-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>
+        </svg>
+      </div>
+      <div>
+        <div class="header-title">Science Media Company</div>
+        <div class="header-subtitle">Artikeloverblik</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="nav-link active" id="nav-inbox" onclick="showView('inbox')">
+        Inbox <span class="nav-badge" id="inbox-badge">—</span>
+      </a>
+      <a class="nav-link" id="nav-arkiv" onclick="showView('arkiv')">
+        Arkiv <span class="nav-badge" id="arkiv-badge">—</span>
+      </a>
+    </nav>
+  </header>
+
+  <main id="main">
+
+    <!-- INBOX -->
+    <div class="view active" id="view-inbox">
+      <div class="section-heading">
+        <span>Nye artikler fra videnskabskilder</span>
+        <button class="btn-crawl" id="btn-crawl">Crawl nu</button>
+      </div>
+      <div id="inbox-loading" class="loading-pulse">Henter artikler…</div>
+      <div class="article-list" id="article-list"></div>
+      <div id="done-message">
+        <div class="done-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+        <div class="done-title">Puljen er gennemgået</div>
+        <div class="done-text">Du er igennem alle artikler i denne pulje.</div>
+      </div>
+    </div>
+
+    <!-- ARKIV -->
+    <div class="view" id="view-arkiv">
+      <div class="section-heading">Arkiverede artikler</div>
+      <div class="archive-list" id="archive-list">
+        <div class="archive-empty">Ingen arkiverede artikler endnu.</div>
+      </div>
+    </div>
+
+  </main>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
