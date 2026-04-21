@@ -22,7 +22,9 @@ export async function handler(event: any): Promise<any> {
 
   const e = event as APIGatewayProxyEventV2;
   const method = e.requestContext.http.method;
-  const path = e.rawPath;
+  const stage = e.requestContext.stage ?? '';
+  const rawPath = e.rawPath;
+  const path = stage && rawPath.startsWith(`/${stage}`) ? rawPath.slice(stage.length + 1) : rawPath;
 
   try {
     if (method === 'OPTIONS') return json(200, {});

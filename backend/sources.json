@@ -7,16 +7,16 @@
     {
       "sourceId": "videnskabdk-1",
       "customerId": "science-media-company",
-      "name": "Videnskab.dk — Seneste",
-      "startUrl": "https://videnskab.dk/seneste/",
+      "name": "Videnskab.dk — Seneste nyt",
+      "startUrl": "https://videnskab.dk/seneste-nyt/",
       "maxItems": 30,
       "enabled": true,
       "selectors": {
-        "item": "article",
-        "title": "h2, h3",
-        "url": "a",
+        "item": "div.card--individual-links",
+        "title": "h3",
+        "url": "a.card__image-invisible-link",
         "urlAttribute": "href",
-        "teaser": "p"
+        "teaser": ""
       }
     },
     {

@@ -2,6 +2,28 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Videnskabsmaskinen — crawler, API og artikel-processor
 
+Parameters:
+  BonzaiBaseUrl:
+    Type: String
+    Default: https://placeholder
+  BonzaiApiKey:
+    Type: String
+    Default: placeholder
+    NoEcho: true
+  BonzaiModel:
+    Type: String
+    Default: gpt-4o
+  WordpressUrl:
+    Type: String
+    Default: https://placeholder
+  WordpressUser:
+    Type: String
+    Default: placeholder
+  WordpressAppPassword:
+    Type: String
+    Default: placeholder
+    NoEcho: true
+
 Globals:
   Function:
     Runtime: nodejs20.x
@@ -18,11 +40,6 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: videnskabsmaskinen-articles
-      CorsConfiguration:
-        CorsRules:
-          - AllowedOrigins: ['*']
-            AllowedMethods: [GET]
-            AllowedHeaders: ['*']
 
   # ── Lambda ──────────────────────────────────────────────────────────────────
   ApiFunction:
@@ -34,12 +51,12 @@ Resources:
       Description: Håndterer alle API-kald og artikel-behandling
       Environment:
         Variables:
-          BONZAI_BASE_URL: '{{resolve:ssm:/videnskabsmaskinen/bonzai/base-url}}'
-          BONZAI_API_KEY: '{{resolve:ssm:/videnskabsmaskinen/bonzai/api-key}}'
-          BONZAI_MODEL: '{{resolve:ssm:/videnskabsmaskinen/bonzai/model}}'
-          WORDPRESS_URL: '{{resolve:ssm:/videnskabsmaskinen/wordpress/url}}'
-          WORDPRESS_USER: '{{resolve:ssm:/videnskabsmaskinen/wordpress/user}}'
-          WORDPRESS_APP_PASSWORD: '{{resolve:ssm:/videnskabsmaskinen/wordpress/app-password}}'
+          BONZAI_BASE_URL: !Ref BonzaiBaseUrl
+          BONZAI_API_KEY: !Ref BonzaiApiKey
+          BONZAI_MODEL: !Ref BonzaiModel
+          WORDPRESS_URL: !Ref WordpressUrl
+          WORDPRESS_USER: !Ref WordpressUser
+          WORDPRESS_APP_PASSWORD: !Ref WordpressAppPassword
       Events:
         HttpApi:
           Type: HttpApi
