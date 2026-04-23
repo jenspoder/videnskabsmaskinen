@@ -1,38 +1,71 @@
 {
   "updatedAt": null,
   "customers": [
-    { "customerId": "science-media-company", "name": "Science Media Company" }
+    { "customerId": "psykiatri", "name": "Psykiatri-tidsskrifter" }
   ],
   "sources": [
     {
-      "sourceId": "videnskabdk-1",
-      "customerId": "science-media-company",
-      "name": "Videnskab.dk — Seneste nyt",
-      "startUrl": "https://videnskab.dk/seneste-nyt/",
+      "sourceId": "jama-psychiatry",
+      "customerId": "psykiatri",
+      "name": "JAMA Psychiatry — Online First",
+      "startUrl": "https://jamanetwork.com/rss/site_14/onlineFirst_70.xml",
       "maxItems": 30,
       "enabled": true,
-      "selectors": {
-        "item": "div.card--individual-links",
-        "title": "h3",
-        "url": "a.card__image-invisible-link",
-        "urlAttribute": "href",
-        "teaser": ""
-      }
+      "type": "rss"
     },
     {
-      "sourceId": "sciencedaily-1",
-      "customerId": "science-media-company",
-      "name": "ScienceDaily — Top News",
-      "startUrl": "https://www.sciencedaily.com/news/top/science/",
+      "sourceId": "biological-psychiatry",
+      "customerId": "psykiatri",
+      "name": "Biological Psychiatry",
+      "startUrl": "https://rss.sciencedirect.com/publication/science/00063223",
       "maxItems": 30,
-      "enabled": false,
-      "selectors": {
-        "item": "div.latest-head",
-        "title": "a",
-        "url": "a",
-        "urlAttribute": "href",
-        "teaser": ""
-      }
+      "enabled": true,
+      "type": "rss"
+    },
+    {
+      "sourceId": "molecular-psychiatry",
+      "customerId": "psykiatri",
+      "name": "Molecular Psychiatry",
+      "startUrl": "https://www.nature.com/mp.rss",
+      "maxItems": 30,
+      "enabled": true,
+      "type": "rss"
+    },
+    {
+      "sourceId": "schizophrenia-bulletin",
+      "customerId": "psykiatri",
+      "name": "Schizophrenia Bulletin — Advance Access",
+      "startUrl": "https://academic.oup.com/rss/site_5240/advanceAccess_3108.xml",
+      "maxItems": 30,
+      "enabled": true,
+      "type": "rss"
+    },
+    {
+      "sourceId": "schizophrenia-research",
+      "customerId": "psykiatri",
+      "name": "Schizophrenia Research",
+      "startUrl": "https://rss.sciencedirect.com/publication/science/09209964",
+      "maxItems": 30,
+      "enabled": true,
+      "type": "rss"
+    },
+    {
+      "sourceId": "acta-psychiatrica-scandinavica",
+      "customerId": "psykiatri",
+      "name": "Acta Psychiatrica Scandinavica",
+      "startUrl": "https://onlinelibrary.wiley.com/feed/16000447/most-recent",
+      "maxItems": 30,
+      "enabled": true,
+      "type": "rss"
+    },
+    {
+      "sourceId": "lancet-psychiatry",
+      "customerId": "psykiatri",
+      "name": "The Lancet Psychiatry — Online First",
+      "startUrl": "https://www.thelancet.com/rssfeed/lanpsy_online.xml",
+      "maxItems": 30,
+      "enabled": true,
+      "type": "rss"
     }
   ]
 }

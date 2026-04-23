@@ -2,6 +2,7 @@ import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import * as crypto from 'crypto';
 import { loadJsonOrDefault, saveArticle, loadArticle, listArticlesInFolder, moveArticle, SOURCES_KEY } from './s3Store';
 import { crawlOneSource } from './crawler/crawlOneSource';
+import { crawlRssSource } from './crawler/crawlRssSource';
 import { generateArticle } from './process/bonzai';
 import { createWordPressDraft } from './process/wordpress';
 import { Article, SourcesStore, CrawlResult } from './types';
@@ -124,7 +125,9 @@ async function runCrawl(): Promise<CrawlResult> {
 
   for (const source of enabledSources) {
     try {
-      const crawled = await crawlOneSource(source);
+      const crawled = source.type === 'rss'
+        ? await crawlRssSource(source)
+        : await crawlOneSource(source);
       for (const item of crawled) {
         const id = crypto.createHash('sha1').update(item.url).digest('hex');
         if (!knownIds.has(id)) {

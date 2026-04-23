@@ -13,7 +13,8 @@ export interface SourceConfig {
   startUrl: string;
   maxItems: number;
   enabled: boolean;
-  selectors: Selectors;
+  type?: 'rss' | 'html';
+  selectors?: Selectors;
 }
 
 export interface Customer {

@@ -1,16 +1,21 @@
 import * as cheerio from 'cheerio';
-import { SourceConfig, Article } from '../types';
+import { SourceConfig, Selectors, Article } from '../types';
 
 export async function crawlOneSource(source: SourceConfig): Promise<Article[]> {
+  if (!source.selectors) {
+    console.error(`HTML source ${source.sourceId} mangler selectors`);
+    return [];
+  }
+  const selectors = source.selectors;
   try {
     const html = await fetchHtml(source.startUrl);
     const $ = cheerio.load(html);
-    const itemNodes = $(source.selectors.item);
+    const itemNodes = $(selectors.item);
     const items: Article[] = [];
     const maxItems = Math.min(itemNodes.length, source.maxItems);
 
     for (let i = 0; i < maxItems; i++) {
-      const item = extractItemData(itemNodes.eq(i), source);
+      const item = extractItemData(itemNodes.eq(i), selectors, source);
       if (item) items.push(item);
     }
 
@@ -31,14 +36,15 @@ async function fetchHtml(url: string): Promise<string> {
 
 function extractItemData(
   node: cheerio.Cheerio<any>,
+  selectors: Selectors,
   source: SourceConfig
 ): Article | null {
   try {
-    const title = node.find(source.selectors.title).first().text().trim();
+    const title = node.find(selectors.title).first().text().trim();
     if (!title) return null;
 
-    const urlAttr = source.selectors.urlAttribute || 'href';
-    let url = node.find(source.selectors.url).first().attr(urlAttr) || '';
+    const urlAttr = selectors.urlAttribute || 'href';
+    let url = node.find(selectors.url).first().attr(urlAttr) || '';
     if (!url) return null;
 
     try {
@@ -47,7 +53,7 @@ function extractItemData(
       return null;
     }
 
-    const teaser = node.find(source.selectors.teaser).first().text().trim() || '';
+    const teaser = selectors.teaser ? node.find(selectors.teaser).first().text().trim() : '';
 
     return {
       id: '',
