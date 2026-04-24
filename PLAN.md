@@ -11,7 +11,7 @@
 - ✅ GitHub: Auto-deploy ved push til `main`
 
 ### Mangler
-- 🟡 **Redaktør-flow (demo)**: frontend har rangering, udvælgelse til **Til behandling** (localStorage), og dedikeret **Udkast-view** med mock-genereret HTML. Backend `POST /articles/rank` og `POST /articles/{id}/process` (Bonzai → WordPress) er kodet, men afventer Lambda-credentials før det kan tages i brug.
+- 🟡 **Redaktør-flow (demo)**: frontend har **rangering**, **udvælgelse til Til behandling** (localStorage) og **dedikeret Udkast-view** med mock-genereret artikel. Hele flowet kan demonstreres uden backend-ændringer. Backend `POST /articles/rank` og `POST /articles/{id}/process` (Bonzai → WordPress) er kodet, men *Send til WordPress* i UI'et er disabled indtil Lambda-credentials er på plads.
 - ⬜ **S3 `articles/sources.json`**: hold produktions-kildelisten i sync med den version, der ligger i Git — Lambda læser fra S3 ved crawl
 - ⬜ Løbende test af enkelte RSS-URL’er (udgivere ændrer feeds)
 - ⬜ Bonzai API credentials sat i Lambda env vars
@@ -37,12 +37,50 @@ API Gateway: https://30bw0tkv7k.execute-api.eu-west-1.amazonaws.com/prod
 Frontend: https://main.d1w9o0e40lcutv.amplifyapp.com/
     → auto-deploy fra GitHub main via Amplify
 
-"Send"-flow:
-Frontend → POST /articles/{id}/process → Bonzai API → WordPress REST API (draft)
+Redaktør-flow (planlagt produktion):
+Frontend (Inbox → Til behandling → Udkast) → POST /articles/{id}/process
+    → Bonzai (genererer udkast) → WordPress REST API (draft)
 
-Rangering (planlagt):
-Lambda → Bonzai (evaluerings-prompt) → felter på artikel-JSON i S3 → GET /articles viser rank → frontend sorterer/fremhæver
+Rangering (planlagt produktion):
+Lambda → Bonzai (evaluerings-prompt) → felter på artikel-JSON i S3
+    → GET /articles viser rank → frontend sorterer/fremhæver
+
+Frontend-demo (i dag, uden backend-afhængigheder):
+Inbox → "Behold" + vinkel → localStorage (Til behandling)
+    → "Generer udkast" → mockGenerate.ts → localStorage (udkast)
+    → Udkast-view → "Send til WordPress" (disabled, afventer credentials)
 ```
+
+---
+
+## Redaktør-flow i frontend (demo)
+
+### Formål
+
+- Vise det fulde redaktør-flow — fra triage til udkast — uden at vente på Bonzai- og WordPress-credentials i Lambda.
+- Hele state ligger i `localStorage`, så demoen overlever reload, men intet skrives til S3.
+
+### Flow
+
+| Skridt | Hvor | Hvad |
+|---|---|---|
+| 1. Triage | **Inbox** | Artikler vises sorteret efter relevans (mock-rang). «Ignorer» kalder backend `PATCH`. «Behold + vinkel» flytter artiklen *lokalt* til Til behandling — intet API-kald. |
+| 2. Udvælgelse | **Til behandling** (nyt nav-link) | Liste over valgte artikler med vinkel. Knapper: «Generer udkast» / «Åbn udkast», «Returner til inbox». |
+| 3. Generering | **Udkast-view** (dedikeret) | `mockGenerate.ts` producerer en dansk populariseret artikel ud fra titel + teaser + vinkel. Tydeligt mærket «Demo-udkast». |
+| 4. Publish | **Udkast-view** | «Send til WordPress» er disabled med tooltip: kræver Bonzai- og WordPress-credentials i Lambda. |
+
+### Filer
+
+- `frontend/src/store.ts` — localStorage-persistence af udvalgte artikler og udkast
+- `frontend/src/mockGenerate.ts` — skabelon-baseret artikel-generator (rubrik, lede, mellemrubrikker, kilde-note)
+- `frontend/src/components/selected.ts` — kort i Til behandling-listen
+- `frontend/src/components/draft.ts` — udkast-view med toolbar og artikel-typografi
+
+### Når Bonzai/WordPress-credentials er på plads
+
+1. Erstat `addSelected(...)`-kaldet i `inbox.ts` med `processArticle(id, angle)` *eller* lad «Send til WordPress» i `draft.ts` kalde `processArticle` med vinklen fra `SelectedArticle`.
+2. Aktivér WP-knappen og fjern tooltip-wrapper i `draft.ts`.
+3. Beslut om den lokale Til behandling-pulje skal bevares som «kladde-pulje før publicering» eller fjernes til fordel for direkte publicering.
 
 ---
 
@@ -139,7 +177,8 @@ aws lambda update-function-configuration \
 
 ## Implementeringsrækkefølge (resterende)
 
-1. **Redaktør-rangering**: typer + Bonzai-evaluering + persistens i S3 + API + frontend-sortering (se afsnit ovenfor)
-2. **Credentials**: Sæt Bonzai + WordPress env vars i Lambda
-3. **Test fuldt flow**: Crawl → inbox → (rangering) → Send / forhåndsvisning → WordPress draft
-4. **Kilder (løbende)**: nye RSS-URL’er, deaktiver ødelagte feeds, hold S3 `sources.json` aligned med beslutninger
+1. **Credentials**: Sæt Bonzai + WordPress env vars i Lambda
+2. **Aktivér rangering i produktion**: skift `handleRank` i `frontend/src/main.ts` fra `mockRankArticle` til `rankInbox()` så scoren persisteres i S3
+3. **Aktivér Send til WordPress**: flyt `processArticle(id, angle)` fra Inbox-flowet til Udkast-viewets WP-knap, og enable knappen
+4. **Test fuldt flow**: Crawl → inbox → rangering → Til behandling → Generer udkast → Send → WordPress draft
+5. **Kilder (løbende)**: nye RSS-URL’er, deaktiver ødelagte feeds, hold S3 `sources.json` aligned med beslutninger
