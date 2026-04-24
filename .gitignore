@@ -3,3 +3,6 @@ node_modules/
 dist/
 *.zip
 .aws-sam/
+.env
+.env.local
+.env.*.local

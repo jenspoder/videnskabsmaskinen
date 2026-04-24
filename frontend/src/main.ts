@@ -165,10 +165,12 @@ function renderInboxFromState(): void {
 function byRelevance(a: Article, b: Article): number {
   const aScore = a.relevanceScore;
   const bScore = b.relevanceScore;
-  if (aScore === null && bScore === null) return 0;
-  if (aScore === null) return 1;
-  if (bScore === null) return -1;
-  return bScore - aScore;
+  const aMissing = aScore == null;
+  const bMissing = bScore == null;
+  if (aMissing && bMissing) return 0;
+  if (aMissing) return 1;
+  if (bMissing) return -1;
+  return (bScore as number) - (aScore as number);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

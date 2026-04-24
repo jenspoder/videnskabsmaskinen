@@ -123,7 +123,7 @@ function animateOut(card: HTMLElement, callback: () => void): void {
 }
 
 function buildRankBadge(article: Article): string {
-  if (article.relevanceScore === null || article.relevanceBucket === null) {
+  if (article.relevanceScore == null || article.relevanceBucket == null) {
     return `<div class="rank-badge rank-pending">Ikke rangeret</div>`;
   }
   const labels: Record<string, string> = {
