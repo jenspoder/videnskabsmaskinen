@@ -11,7 +11,7 @@
 - ✅ GitHub: Auto-deploy ved push til `main`
 
 ### Mangler
-- ⬜ **Redaktør-rangering**: evaluering af artikler + score/rank for relevans (se afsnit nedenfor; ikke implementeret endnu)
+- 🟡 **Redaktør-rangering**: frontend-demo med client-side keyword-heuristik er på plads (knap «Ranger alle»); backend `POST /articles/rank` kalder Bonzai, men afventer Lambda-credentials før det kan tages i brug
 - ⬜ **S3 `articles/sources.json`**: hold produktions-kildelisten i sync med den version, der ligger i Git — Lambda læser fra S3 ved crawl
 - ⬜ Løbende test af enkelte RSS-URL’er (udgivere ændrer feeds)
 - ⬜ Bonzai API credentials sat i Lambda env vars
@@ -73,13 +73,19 @@ Lambda → Bonzai (evaluerings-prompt) → felter på artikel-JSON i S3 → GET 
 
 **Afhængighed:** Bonzai-credentials i Lambda skal virke før rangering kan køre i produktion; ved lokal udvikling kan samme API testes via env vars.
 
-### Implementering (første iteration)
+### Implementering
 
-1. **Redaktionsprofil** — én fast tekstblok (senere: per `customerId` i `sources.json` eller egen fil i S3).
-2. **`backend/src/process/rankArticle.ts`** (eller lign.) — kalder modellen med titel, teaser, URL (evt. kilde-navn); kræv JSON-svar: `score`, `rationale`, evt. `bucket`.
-3. **`Article`-type + S3** — når rank er beregnet, skriv opdateret JSON tilbage til samme nøgle i `inbox/`.
-4. **Trigger** — enten (A) automatisk efter crawl for nye artikler, (B) `POST` der ranker hele inbox, eller (C) per-artikel knap; start gerne med **B eller C** for lavere omkostning og nemmere fejlsøgning.
-5. **Frontend** — sortér liste efter `relevanceScore` desc; vis score + kort rationale på kortet.
+**Frontend-demo (på plads):**
+- `frontend/src/mockRank.ts` — deterministisk keyword-heuristik (psykiatri-/psykologi-termer + RCT/metaanalyse positivt, pressemeddelelser/dyrestudier negativt) der giver score 0–100, bucket og rationale.
+- `Ranger alle`-knap kører mock i memory og sorterer listen.
+- Bruges til at vise konceptet uden Bonzai; resultatet persisteres ikke i S3 og forsvinder ved reload.
+
+**Backend (klar, afventer credentials):**
+1. `backend/src/process/editorialProfile.ts` — redaktionsprofil-tekst.
+2. `backend/src/process/rankArticle.ts` — kalder modellen med titel, teaser og URL; kræver JSON-svar med `score`, `bucket`, `rationale`.
+3. `Article`-type + S3 — opdateret JSON skrives tilbage til samme nøgle i `inbox/` med `relevanceScore`, `relevanceBucket`, `relevanceRationale`, `rankedAt`.
+4. Trigger via `POST /articles/{id}/rank` (én artikel) eller `POST /articles/rank` (batch over inbox; `?force=true` for re-rank).
+5. Når Bonzai-credentials er på plads i Lambda: skift `handleRank` i `frontend/src/main.ts` til at kalde `rankInbox()` fra `api.ts` i stedet for mock.
 
 ### Åbne produktspørgsmål
 

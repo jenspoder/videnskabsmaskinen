@@ -1,7 +1,8 @@
 import type { Article } from './types';
-import { listArticles, triggerCrawl, rankInbox } from './api';
+import { listArticles, triggerCrawl } from './api';
 import { buildInboxCard } from './components/inbox';
 import { buildArchiveCard } from './components/archive';
+import { mockRankArticle } from './mockRank';
 
 let inboxArticles: Article[] = [];
 let openAngleId: string | null = null;
@@ -120,23 +121,43 @@ async function handleCrawl(btn: HTMLButtonElement): Promise<void> {
   }
 }
 
-// ── Ranger-knap ───────────────────────────────────────────────────────────────
+// ── Ranger-knap (frontend-demo, ingen API) ───────────────────────────────────
+// Når Bonzai er sat op i Lambda, kan dette skiftes til rankInbox() fra api.ts.
 async function handleRank(btn: HTMLButtonElement): Promise<void> {
   const original = btn.textContent;
   btn.textContent = 'Rangerer…';
   btn.disabled = true;
   try {
-    const result = await rankInbox();
-    await renderInbox();
-    if (result.errors.length > 0) {
-      console.warn('Rank-fejl:', result.errors);
-      alert(`Rangerede ${result.ranked} artikler, ${result.errors.length} fejlede.`);
+    for (const article of inboxArticles) {
+      const result = mockRankArticle(article);
+      article.relevanceScore = result.score;
+      article.relevanceBucket = result.bucket;
+      article.relevanceRationale = result.rationale;
+      article.rankedAt = new Date().toISOString();
     }
-  } catch (err) {
-    alert(`Rangering fejlede: ${err instanceof Error ? err.message : 'Ukendt fejl'}`);
+    renderInboxFromState();
   } finally {
     btn.textContent = original;
     btn.disabled = false;
+  }
+}
+
+function renderInboxFromState(): void {
+  articleList.innerHTML = '';
+  inboxArticles.sort(byRelevance);
+  for (const article of inboxArticles) {
+    const card = buildInboxCard(
+      article,
+      () => {
+        refreshBadges();
+        if (articleList.querySelectorAll('.article-card:not(.removing)').length === 0) {
+          doneMessage.classList.add('visible');
+        }
+      },
+      () => openAngleId,
+      (id) => { openAngleId = id; }
+    );
+    articleList.appendChild(card);
   }
 }
 
