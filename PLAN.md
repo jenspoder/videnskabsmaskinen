@@ -65,20 +65,31 @@ Inbox → "Behold" + vinkel → localStorage (Til behandling)
 | Skridt | Hvor | Hvad |
 |---|---|---|
 | 1. Triage | **Inbox** | Artikler vises sorteret efter relevans (mock-rang). «Ignorer» kalder backend `PATCH`. «Behold + vinkel» flytter artiklen *lokalt* til Til behandling — intet API-kald. |
-| 2. Udvælgelse | **Til behandling** (nyt nav-link) | Liste over valgte artikler med vinkel. Knapper: «Generer udkast» / «Åbn udkast», «Returner til inbox». |
-| 3. Generering | **Udkast-view** (dedikeret) | `mockGenerate.ts` producerer en dansk populariseret artikel ud fra titel + teaser + vinkel. Tydeligt mærket «Demo-udkast». |
+| 2. Udvælgelse | **Til behandling** (nyt nav-link) | Liste over valgte artikler med vinkel. Vinklen kan **inline-redigeres** (Rediger-knap → textarea → Gem); ved ændret vinkel slettes evt. eksisterende udkast så det regenereres med ny instruktion. Knapper: «Generer udkast» / «Åbn udkast», «Returner til inbox». |
+| 3. Generering | **Udkast-view** (dedikeret) | `mockGenerate.ts` producerer en dansk populariseret artikel ud fra titel + teaser + vinkel. Tydeligt mærket «Demo-udkast». Kilde og «Læs videre» linker til originalen. |
 | 4. Publish | **Udkast-view** | «Send til WordPress» er disabled med tooltip: kræver Bonzai- og WordPress-credentials i Lambda. |
+
+### Begrænsninger ved mock-generatoren
+
+`mockGenerate.ts` er **ikke en LLM** — det er ren string-skabelon. Den indsætter `title`, `teaser` og `angle` som substrings i et fast layout (rubrik + lede + 5 sektioner + closer). Konsekvenser:
+
+- **Vinklen styrer ikke tone/stil/struktur.** Skriver redaktøren «omformuler til piratsprog», får man ordret sætningen «Redaktionelt har vi valgt at lægge vægt på omformuler indhold til piratsprog» — den faste tekst rundt om er uændret.
+- **To af de fem sektioner er 100% statiske** («Sådan bør resultaterne læses», «Hvad det kan betyde i praksis») og ens på tværs af alle artikler.
+- **Ingen domæneforståelse, ingen syntese, ingen omskrivning.** Teaseren gengives ordret.
+
+Det er **bevidst** for at demoen ikke skal pretendere at være ægte AI-output. Tagget «Demo-udkast» i Udkast-viewets meta-blok signalerer dette. Reelt indhold kommer først når `processArticle(id, angle)`-routen i Lambda får Bonzai-credentials.
 
 ### Filer
 
-- `frontend/src/store.ts` — localStorage-persistence af udvalgte artikler og udkast
+- `frontend/src/store.ts` — localStorage-persistence af udvalgte artikler og udkast (`getSelected`, `addSelected`, `removeSelected`, `updateAngle`, `getDraft`, `saveDraft`)
 - `frontend/src/mockGenerate.ts` — skabelon-baseret artikel-generator (rubrik, lede, mellemrubrikker, kilde-note)
-- `frontend/src/components/selected.ts` — kort i Til behandling-listen
+- `frontend/src/components/selected.ts` — kort i Til behandling-listen, inkl. inline-redigering af vinkel
 - `frontend/src/components/draft.ts` — udkast-view med toolbar og artikel-typografi
+- `frontend/src/utils/text.ts` — `cleanTeaser` der striper inline metadata fra ScienceDirect-/Elsevier-feeds (`Publication date:`, `Source:`, `Author(s):`)
 
 ### Når Bonzai/WordPress-credentials er på plads
 
-1. Erstat `addSelected(...)`-kaldet i `inbox.ts` med `processArticle(id, angle)` *eller* lad «Send til WordPress» i `draft.ts` kalde `processArticle` med vinklen fra `SelectedArticle`.
+1. Erstat `mockGenerate(...)`-kaldet i `draft.ts` med et kald til `processArticle(id, angle)` (eller en ny dedikeret «generer udkast»-route der returnerer HTML uden at publicere).
 2. Aktivér WP-knappen og fjern tooltip-wrapper i `draft.ts`.
 3. Beslut om den lokale Til behandling-pulje skal bevares som «kladde-pulje før publicering» eller fjernes til fordel for direkte publicering.
 
@@ -138,7 +149,7 @@ RSS giver stabil struktur (titel, teaser, link) uden skrøbelige HTML-selektorer
 
 | Del | Status |
 |-----|--------|
-| `backend/src/crawler/crawlRssSource.ts` | Henter feed med `fetch()`, parser `<item>` med let string/regex-parser |
+| `backend/src/crawler/crawlRssSource.ts` | Henter feed med `fetch()`, parser `<item>` med let string/regex-parser. Renser teaseren for inline metadata (`Publication date:`, `Source:`, `Author(s):`) før den skrives til S3 |
 | `handler.ts` → `runCrawl()` | `source.type === 'rss'` → RSS, ellers HTML |
 | `backend/sources.json` | Flere RSS-kilder (fx JAMA Psychiatry, Biological Psychiatry, Lancet Psychiatry, …) under én kunde |
 
