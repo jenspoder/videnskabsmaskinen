@@ -46,6 +46,7 @@ async function renderInbox(): Promise<void> {
     return;
   }
 
+  applyMockRankToUnranked(inboxArticles);
   inboxArticles.sort(byRelevance);
 
   for (const article of inboxArticles) {
@@ -139,6 +140,18 @@ async function handleRank(btn: HTMLButtonElement): Promise<void> {
   } finally {
     btn.textContent = original;
     btn.disabled = false;
+  }
+}
+
+function applyMockRankToUnranked(articles: Article[]): void {
+  for (const article of articles) {
+    if (article.relevanceScore == null) {
+      const result = mockRankArticle(article);
+      article.relevanceScore = result.score;
+      article.relevanceBucket = result.bucket;
+      article.relevanceRationale = result.rationale;
+      article.rankedAt = new Date().toISOString();
+    }
   }
 }
 
