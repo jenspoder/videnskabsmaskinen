@@ -357,17 +357,71 @@
       border-radius: 2px;
       margin-bottom: 0.95rem;
     }
+    .selected-angle-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+    }
     .selected-angle-label {
       font-size: 0.6rem;
       text-transform: uppercase;
       letter-spacing: 0.2rem;
       opacity: 0.45;
-      margin-bottom: 0.25rem;
+    }
+    .selected-angle-edit {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.5);
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18rem;
+      cursor: pointer;
+      padding: 0.15rem 0.35rem;
+      border-radius: 2px;
+      transition: color 0.15s ease, background-color 0.15s ease;
+    }
+    .selected-angle-edit:hover {
+      color: var(--accent);
+      background-color: rgba(255,255,255,0.04);
     }
     .selected-angle-text {
       font-size: 0.85rem;
       line-height: 1.5;
       opacity: 0.85;
+    }
+    .selected-angle-edit-zone {
+      display: none;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+    .selected-angle-edit-zone .angle-input {
+      width: 100%;
+      background-color: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: inherit;
+      font-family: inherit;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      padding: 0.55rem 0.7rem;
+      border-radius: 3px;
+      resize: vertical;
+      min-height: 4rem;
+    }
+    .selected-angle-edit-zone .angle-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .selected-angle-edit-buttons {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .selected-angle[data-mode="edit"] .selected-angle-text,
+    .selected-angle[data-mode="edit"] .selected-angle-edit {
+      display: none;
+    }
+    .selected-angle[data-mode="edit"] .selected-angle-edit-zone {
+      display: flex;
     }
 
     .selected-actions {

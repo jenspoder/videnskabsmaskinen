@@ -36,6 +36,16 @@ export function removeSelected(id: string): void {
   removeDraft(id);
 }
 
+export function updateAngle(id: string, angle: string): SelectedArticle | null {
+  const list = getSelected();
+  const idx = list.findIndex((s) => s.article.id === id);
+  if (idx < 0) return null;
+  list[idx] = { ...list[idx], angle };
+  writeJson(KEY_SELECTED, list);
+  removeDraft(id);
+  return list[idx];
+}
+
 export function getDraft(id: string): DraftRecord | null {
   const drafts = readJson<DraftRecord[]>(KEY_DRAFTS, []);
   return drafts.find((d) => d.articleId === id) ?? null;
