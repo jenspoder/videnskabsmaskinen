@@ -316,6 +316,13 @@
       margin-bottom: 0.85rem;
     }
     .selected-title-block { min-width: 0; flex: 1; }
+    .selected-title-link {
+      text-decoration: none;
+      color: inherit;
+    }
+    .selected-title-link:hover .selected-title {
+      color: var(--accent);
+    }
     .selected-title {
       font-size: 0.92rem;
       font-weight: 600;
@@ -323,6 +330,7 @@
       letter-spacing: 0.09rem;
       line-height: 1.4;
       margin-bottom: 0.4rem;
+      transition: color 0.15s ease;
     }
 
     .draft-badge {
@@ -437,6 +445,17 @@
     }
     .draft-meta-value { opacity: 0.85; line-height: 1.45; }
 
+    .draft-source-link {
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 1px dotted rgba(255,255,255,0.3);
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    .draft-source-link:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
     .demo-tag {
       display: inline-block;
       font-size: 0.58rem;
@@ -485,6 +504,15 @@
       margin-top: 2rem;
       font-size: 0.75rem;
       opacity: 0.4;
+    }
+    .draft-body a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid var(--accent-dim);
+      transition: border-color 0.15s ease;
+    }
+    .draft-body a:hover {
+      border-bottom-color: var(--accent);
     }
 
     /* ── KNAPPER ── */

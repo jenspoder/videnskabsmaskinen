@@ -30,8 +30,10 @@ export function buildSelectedCard(
   card.innerHTML = `
     <div class="selected-head">
       <div class="selected-title-block">
-        <div class="selected-title">${escape(article.title)}</div>
-        <a href="${article.url}" target="_blank" rel="noopener" class="card-source-link">
+        <a href="${escape(article.url)}" target="_blank" rel="noopener" class="selected-title-link">
+          <div class="selected-title">${escape(article.title)}</div>
+        </a>
+        <a href="${escape(article.url)}" target="_blank" rel="noopener" class="card-source-link">
           Læs original på ${escape(hostname)} ${ARROW_SVG}
         </a>
       </div>

@@ -41,7 +41,7 @@ function parseItem(itemXml: string, source: SourceConfig): Article | null {
   if (!url) return null;
 
   const description = extractTag(itemXml, 'description');
-  const teaser = stripHtml(description).slice(0, 500);
+  const teaser = cleanTeaser(stripHtml(description)).slice(0, 500);
 
   return {
     id: '',
@@ -94,4 +94,21 @@ function decodeContent(raw: string): string {
 
 function stripHtml(text: string): string {
   return text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+const META_PREFIXES = ['Publication date', 'Source', 'Author(s)', 'Authors', 'DOI'];
+
+function cleanTeaser(raw: string): string {
+  if (!raw) return '';
+  let text = raw.replace(/\s+/g, ' ').trim();
+  for (const prefix of META_PREFIXES) {
+    const re = new RegExp(
+      `${prefix}\\s*:\\s*[^]*?(?=\\s+(?:${META_PREFIXES.join('|')})\\s*:|$)`,
+      'gi'
+    );
+    text = text.replace(re, ' ');
+  }
+  text = text.replace(/\s+/g, ' ').trim();
+  text = text.replace(/^[—–\-:•·,;\s]+/, '').trim();
+  return text;
 }

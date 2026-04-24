@@ -1,6 +1,7 @@
 import type { Article } from '../types';
 import { patchArticle } from '../api';
 import { addSelected, isSelected } from '../store';
+import { cleanTeaser } from '../utils/text';
 
 const PLACEHOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
   <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9l-6-6z"/>
@@ -40,7 +41,7 @@ export function buildInboxCard(
       <div class="card-content">
         ${rankHtml}
         <div class="card-title">${article.title}</div>
-        <div class="card-description">${article.teaser || ''}</div>
+        <div class="card-description">${escapeHtml(cleanTeaser(article.teaser))}</div>
         ${rationaleHtml}
         <a href="${article.url}" target="_blank" rel="noopener" class="card-source-link">
           Læs original på ${hostname} ${ARROW_SVG}

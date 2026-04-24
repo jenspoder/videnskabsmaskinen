@@ -33,7 +33,11 @@ export function renderDraftView(
     <div class="draft-meta">
       <div class="draft-meta-row">
         <span class="draft-meta-label">Kilde</span>
-        <span class="draft-meta-value">${escape(article.title)}</span>
+        <span class="draft-meta-value">
+          <a href="${escape(article.url)}" target="_blank" rel="noopener" class="draft-source-link">
+            ${escape(article.title)}
+          </a>
+        </span>
       </div>
       <div class="draft-meta-row">
         <span class="draft-meta-label">Vinkel</span>
