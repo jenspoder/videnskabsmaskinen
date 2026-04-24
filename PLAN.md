@@ -6,13 +6,14 @@
 - ✅ Backend: Lambda + S3 (`videnskabsmaskinen-articles`) + API Gateway deployet via AWS SAM
 - ✅ EventBridge: Crawler kører automatisk hver 6. time
 - ✅ Frontend: Vite + TypeScript deployet på Amplify (`https://main.d1w9o0e40lcutv.amplifyapp.com/`)
-- ✅ Crawler: Videnskab.dk (HTML) kører, 16 artikler i inbox
+- ✅ Crawler: **RSS** (`crawlRssSource.ts`, `type: "rss"` i kilder) + **HTML** (`crawlOneSource`) — `runCrawl()` vælger ud fra `source.type`
+- ✅ **Kildelisten** i repo: flere psykiatri-/psykologi-tidsskrifts-RSS-feeds i `backend/sources.json` (kunden «Psykiatri-tidsskrifter»); reelt indhold kommer fra de feeds projektleder har lagt på
 - ✅ GitHub: Auto-deploy ved push til `main`
 
 ### Mangler
 - ⬜ **Redaktør-rangering**: evaluering af artikler + score/rank for relevans (se afsnit nedenfor; i gang på branch `feature/redaktor-rangering`)
-- ⬜ RSS-understøttelse i crawler (se nedenfor)
-- ⬜ Kildeliste defineret og testet
+- ⬜ **S3 `articles/sources.json`**: sikr at deployed/produktions-kilder matcher den liste I vil køre (Git-filen er sandhed i repo; Lambda læser fra S3 ved crawl)
+- ⬜ Løbende test af enkelte RSS-URL’er (udgivere ændrer feeds)
 - ⬜ Bonzai API credentials sat i Lambda env vars
 - ⬜ WordPress credentials sat i Lambda env vars
 - ⬜ Test af fuldt process-article flow (Bonzai → WordPress)
@@ -87,30 +88,25 @@ Lambda → Bonzai (evaluerings-prompt) → felter på artikel-JSON i S3 → GET 
 
 ---
 
-## Næste: RSS-understøttelse i crawler
+## Crawler: RSS (implementeret)
 
-### Hvorfor RSS
-- Stabil struktur — ingen CSS-selektorer der går i stykker ved redesign
-- Titel, beskrivelse, URL og dato ud af boksen
-- De fleste WordPress-sites har `/feed/` som standard (inkl. Poder)
-- Bruges til kilder der har RSS — HTML-crawleren beholdes til resten
+RSS giver stabil struktur (titel, teaser, link) uden skrøbelige HTML-selektorer. **HTML-crawlen** findes stadig til kilder uden brugbart feed.
 
-### Implementering
-Tilføj `type: "rss" | "html"` i `sources.json` per kilde.
+| Del | Status |
+|-----|--------|
+| `backend/src/crawler/crawlRssSource.ts` | Henter feed med `fetch()`, parser `<item>` med let string/regex-parser |
+| `handler.ts` → `runCrawl()` | `source.type === 'rss'` → RSS, ellers HTML |
+| `backend/sources.json` | Flere RSS-kilder (fx JAMA Psychiatry, Biological Psychiatry, Lancet Psychiatry, …) under én kunde |
 
-Ny fil: `backend/src/crawler/crawlRssSource.ts`
-- Henter RSS-feed med `fetch()`
-- Parser XML med en lille regex/string-parser (ingen ekstra dependency)
-- Returnerer samme `Article`-array som `crawlOneSource`
+**Runtime:** Lambda læser kilder fra **`articles/sources.json` i S3** — ved ændring af kilder skal den fil opdateres (eller holdes i sync med Git), ellers kører produktion med gamle kilder.
 
-`handler.ts` → `runCrawl()` vælger parser baseret på `source.type`.
+### Eksempel-kilder (også muligt ved siden af tidsskrifter)
 
-### Kilder (TBD — defineres løbende)
 | Kilde | Type | URL |
 |---|---|---|
 | Videnskab.dk | HTML | `https://videnskab.dk/seneste-nyt/` |
-| Poder (WordPress) | RSS | `https://poder.dk/feed/` |
-| Øvrige | TBD | TBD |
+| WordPress-sites | RSS | typisk `/feed/` |
+| Tidsskrifter | RSS | per udgiver (som i `sources.json` i dag) |
 
 ---
 
@@ -138,7 +134,6 @@ aws lambda update-function-configuration \
 ## Implementeringsrækkefølge (resterende)
 
 1. **Redaktør-rangering**: typer + Bonzai-evaluering + persistens i S3 + API + frontend-sortering (se afsnit ovenfor)
-2. **RSS-crawler**: `crawlRssSource.ts` + `type`-felt i `sources.json` (filer findes; verificér deploy og kilder)
-3. **Kildeliste**: Definer og test kilder med rigtige selektorer/RSS-URLs
-4. **Credentials**: Sæt Bonzai + WordPress env vars i Lambda
-5. **Test fuldt flow**: Crawl → inbox → (rangering) → Send / forhåndsvisning → WordPress draft
+2. **Credentials**: Sæt Bonzai + WordPress env vars i Lambda
+3. **Test fuldt flow**: Crawl → inbox → (rangering) → Send / forhåndsvisning → WordPress draft
+4. **Kilder (løbende)**: nye RSS-URL’er, deaktiver ødelagte feeds, hold S3 `sources.json` aligned med beslutninger
