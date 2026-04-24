@@ -7,12 +7,12 @@
 - ✅ EventBridge: Crawler kører automatisk hver 6. time
 - ✅ Frontend: Vite + TypeScript deployet på Amplify (`https://main.d1w9o0e40lcutv.amplifyapp.com/`)
 - ✅ Crawler: **RSS** (`crawlRssSource.ts`, `type: "rss"` i kilder) + **HTML** (`crawlOneSource`) — `runCrawl()` vælger ud fra `source.type`
-- ✅ **Kildelisten** i repo: flere psykiatri-/psykologi-tidsskrifts-RSS-feeds i `backend/sources.json` (kunden «Psykiatri-tidsskrifter»); reelt indhold kommer fra de feeds projektleder har lagt på
+- ✅ **Kildelisten** i repo: flere RSS-feeds fra psykiatri- og psykologi-tidsskrifter i `backend/sources.json` (grupperet med `customerId` i filen)
 - ✅ GitHub: Auto-deploy ved push til `main`
 
 ### Mangler
-- ⬜ **Redaktør-rangering**: evaluering af artikler + score/rank for relevans (se afsnit nedenfor; i gang på branch `feature/redaktor-rangering`)
-- ⬜ **S3 `articles/sources.json`**: sikr at deployed/produktions-kilder matcher den liste I vil køre (Git-filen er sandhed i repo; Lambda læser fra S3 ved crawl)
+- ⬜ **Redaktør-rangering**: evaluering af artikler + score/rank for relevans (se afsnit nedenfor; ikke implementeret endnu)
+- ⬜ **S3 `articles/sources.json`**: hold produktions-kildelisten i sync med den version, der ligger i Git — Lambda læser fra S3 ved crawl
 - ⬜ Løbende test af enkelte RSS-URL’er (udgivere ændrer feeds)
 - ⬜ Bonzai API credentials sat i Lambda env vars
 - ⬜ WordPress credentials sat i Lambda env vars
@@ -48,19 +48,19 @@ Lambda → Bonzai (evaluerings-prompt) → felter på artikel-JSON i S3 → GET 
 
 ## Redaktør-rangering (relevans)
 
-### Ønske fra projektleder
+### Formål
 
-> Det kunne være fedt, hvis vi fik lavet et setup, hvor den kunne evaluere de artikler, der er, og give dem en eller anden form for rank ud fra, hvor relevante de er for redaktøren.
+- Evaluere indkomne artikler og give dem en **rang eller score** efter relevans for redaktionen, så arbejdstriage bliver lettere.
 
 ### Mål
 
-- Hver (ny) artikel — eller hele inbox på kommando — **evalueres** mod en aftalt **redaktionsprofil** (temaer, målgruppe, hvad I typisk dækker / ikke dækker).
+- Hver (ny) artikel — eller hele inbox på kommando — **evalueres** mod en aftalt **redaktionsprofil** (temaer, målgruppe, hvad redaktionen typisk dækker / ikke dækker).
 - Output: fx **numerisk score** (0–100), **kort begrundelse** til redaktøren, og evt. **etiket** (fx «høj/mellem/lav»).
 - **Frontend**: artikler vises sorteret efter relevans (eller med tydelig markering), så redaktøren ser de vigtigste først.
 
 ### Er backend klar?
 
-**Delvist.** I har allerede det rigtige sted at bygge videre:
+**Delvist.** Den eksisterende arkitektur giver et godt udgangspunkt:
 
 | Findes i dag | Bruges til rangering |
 |----------------|----------------------|
@@ -71,7 +71,7 @@ Lambda → Bonzai (evaluerings-prompt) → felter på artikel-JSON i S3 → GET 
 
 **Det findes ikke endnu:** felter på `Article` i `types.ts`, persistens i JSON, prompt + parsing af struktureret svar, API-route (fx `POST /articles/rank` eller ranking i crawl), og UI-sortering.
 
-**Afhængighed:** Bonzai-credentials i Lambda skal virke før rangering kan køre i produktion (lokalt kan I teste med env vars mod samme API).
+**Afhængighed:** Bonzai-credentials i Lambda skal virke før rangering kan køre i produktion; ved lokal udvikling kan samme API testes via env vars.
 
 ### Implementering (første iteration)
 
