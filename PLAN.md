@@ -11,7 +11,7 @@
 - ✅ GitHub: Auto-deploy ved push til `main`
 
 ### Mangler
-- 🟡 **Redaktør-rangering**: frontend-demo med client-side keyword-heuristik er på plads (knap «Ranger alle»); backend `POST /articles/rank` kalder Bonzai, men afventer Lambda-credentials før det kan tages i brug
+- 🟡 **Redaktør-flow (demo)**: frontend har rangering, udvælgelse til **Til behandling** (localStorage), og dedikeret **Udkast-view** med mock-genereret HTML. Backend `POST /articles/rank` og `POST /articles/{id}/process` (Bonzai → WordPress) er kodet, men afventer Lambda-credentials før det kan tages i brug.
 - ⬜ **S3 `articles/sources.json`**: hold produktions-kildelisten i sync med den version, der ligger i Git — Lambda læser fra S3 ved crawl
 - ⬜ Løbende test af enkelte RSS-URL’er (udgivere ændrer feeds)
 - ⬜ Bonzai API credentials sat i Lambda env vars

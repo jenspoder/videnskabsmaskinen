@@ -1,5 +1,6 @@
 import type { Article } from '../types';
-import { patchArticle, processArticle } from '../api';
+import { patchArticle } from '../api';
+import { addSelected, isSelected } from '../store';
 
 const PLACEHOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
   <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9l-6-6z"/>
@@ -58,7 +59,7 @@ export function buildInboxCard(
             placeholder="Hvad er vinklen på denne artikel?"></textarea>
         </div>
         <div class="angle-buttons">
-          <button class="btn-send" id="btn-send-${id}">Send</button>
+          <button class="btn-send" id="btn-send-${id}">Føj til behandling</button>
           <button class="btn-cancel" id="btn-cancel-${id}">Annuller</button>
         </div>
       </div>
@@ -98,20 +99,14 @@ export function buildInboxCard(
     });
   });
 
-  btnSend.addEventListener('click', async () => {
+  btnSend.addEventListener('click', () => {
     const angle = angleInput.value.trim();
-    btnSend.textContent = 'Behandler…';
-    btnSend.disabled = true;
-
-    try {
-      await processArticle(id, angle);
+    if (isSelected(id)) {
       animateOut(card, () => onRemoved());
-    } catch (err) {
-      console.error(err);
-      alert(`Fejl ved behandling: ${err instanceof Error ? err.message : 'Ukendt fejl'}`);
-      btnSend.textContent = 'Send';
-      btnSend.disabled = false;
+      return;
     }
+    addSelected(article, angle);
+    animateOut(card, () => onRemoved());
   });
 
   return card;
