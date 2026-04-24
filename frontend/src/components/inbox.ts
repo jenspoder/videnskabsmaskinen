@@ -28,12 +28,19 @@ export function buildInboxCard(
     catch { return article.url; }
   })();
 
+  const rankHtml = buildRankBadge(article);
+  const rationaleHtml = article.relevanceRationale
+    ? `<div class="card-rationale">${escapeHtml(article.relevanceRationale)}</div>`
+    : '';
+
   card.innerHTML = `
     <div class="card-inner">
       <div class="card-image">${PLACEHOLDER_SVG}</div>
       <div class="card-content">
+        ${rankHtml}
         <div class="card-title">${article.title}</div>
         <div class="card-description">${article.teaser || ''}</div>
+        ${rationaleHtml}
         <a href="${article.url}" target="_blank" rel="noopener" class="card-source-link">
           Læs original på ${hostname} ${ARROW_SVG}
         </a>
@@ -113,4 +120,27 @@ export function buildInboxCard(
 function animateOut(card: HTMLElement, callback: () => void): void {
   card.classList.add('removing');
   setTimeout(callback, 360);
+}
+
+function buildRankBadge(article: Article): string {
+  if (article.relevanceScore === null || article.relevanceBucket === null) {
+    return `<div class="rank-badge rank-pending">Ikke rangeret</div>`;
+  }
+  const labels: Record<string, string> = {
+    high: 'Høj relevans',
+    medium: 'Medium',
+    low: 'Lav relevans',
+  };
+  const label = labels[article.relevanceBucket] ?? article.relevanceBucket;
+  return `
+    <div class="rank-badge rank-${article.relevanceBucket}">
+      <span class="rank-score">${article.relevanceScore}</span>
+      <span class="rank-label">${label}</span>
+    </div>`;
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }

@@ -56,6 +56,10 @@ function parseItem(itemXml: string, source: SourceConfig): Article | null {
     reviewedAt: null,
     publishedAt: null,
     wordpressPostId: null,
+    relevanceScore: null,
+    relevanceBucket: null,
+    relevanceRationale: null,
+    rankedAt: null,
   };
 }
 

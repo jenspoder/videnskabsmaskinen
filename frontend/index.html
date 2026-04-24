@@ -232,6 +232,66 @@
       gap: 0.75rem;
     }
 
+    .section-actions {
+      display: inline-flex;
+      gap: 0.5rem;
+    }
+
+    /* ── RANGERING ── */
+    .rank-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18rem;
+      font-weight: 600;
+      padding: 0.18rem 0.5rem 0.18rem 0.35rem;
+      border-radius: 3px;
+      margin-bottom: 0.6rem;
+      background-color: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.45);
+    }
+    .rank-badge .rank-score {
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      padding: 0.05rem 0.35rem;
+      background-color: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      min-width: 1.6rem;
+      text-align: center;
+    }
+    .rank-badge.rank-high {
+      background-color: var(--accent-dim);
+      color: var(--accent);
+    }
+    .rank-badge.rank-high .rank-score { background-color: var(--accent-mid); }
+    .rank-badge.rank-medium {
+      background-color: rgba(250,204,21,0.12);
+      color: #facc15;
+    }
+    .rank-badge.rank-medium .rank-score { background-color: rgba(250,204,21,0.22); }
+    .rank-badge.rank-low {
+      background-color: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.35);
+    }
+    .rank-badge.rank-pending {
+      background-color: transparent;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.3);
+      padding: 0.18rem 0.55rem;
+    }
+
+    .card-rationale {
+      font-size: 0.78rem;
+      line-height: 1.5;
+      opacity: 0.55;
+      font-style: italic;
+      margin: -0.25rem 0 0.85rem;
+      padding-left: 0.6rem;
+      border-left: 2px solid rgba(255,255,255,0.1);
+    }
+
     /* ── KNAPPER ── */
     button {
       appearance: none;
@@ -536,7 +596,10 @@
     <div class="view active" id="view-inbox">
       <div class="section-heading">
         <span>Nye artikler fra videnskabskilder</span>
-        <button class="btn-crawl" id="btn-crawl">Crawl nu</button>
+        <span class="section-actions">
+          <button class="btn-crawl" id="btn-rank">Ranger alle</button>
+          <button class="btn-crawl" id="btn-crawl">Crawl nu</button>
+        </span>
       </div>
       <div id="inbox-loading" class="loading-pulse">Henter artikler…</div>
       <div class="article-list" id="article-list"></div>

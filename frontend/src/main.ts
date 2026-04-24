@@ -1,5 +1,5 @@
 import type { Article } from './types';
-import { listArticles, triggerCrawl } from './api';
+import { listArticles, triggerCrawl, rankInbox } from './api';
 import { buildInboxCard } from './components/inbox';
 import { buildArchiveCard } from './components/archive';
 
@@ -44,6 +44,8 @@ async function renderInbox(): Promise<void> {
     doneMessage.classList.add('visible');
     return;
   }
+
+  inboxArticles.sort(byRelevance);
 
   for (const article of inboxArticles) {
     const card = buildInboxCard(
@@ -118,11 +120,45 @@ async function handleCrawl(btn: HTMLButtonElement): Promise<void> {
   }
 }
 
+// ── Ranger-knap ───────────────────────────────────────────────────────────────
+async function handleRank(btn: HTMLButtonElement): Promise<void> {
+  const original = btn.textContent;
+  btn.textContent = 'Rangerer…';
+  btn.disabled = true;
+  try {
+    const result = await rankInbox();
+    await renderInbox();
+    if (result.errors.length > 0) {
+      console.warn('Rank-fejl:', result.errors);
+      alert(`Rangerede ${result.ranked} artikler, ${result.errors.length} fejlede.`);
+    }
+  } catch (err) {
+    alert(`Rangering fejlede: ${err instanceof Error ? err.message : 'Ukendt fejl'}`);
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+// ── Sortering ─────────────────────────────────────────────────────────────────
+function byRelevance(a: Article, b: Article): number {
+  const aScore = a.relevanceScore;
+  const bScore = b.relevanceScore;
+  if (aScore === null && bScore === null) return 0;
+  if (aScore === null) return 1;
+  if (bScore === null) return -1;
+  return bScore - aScore;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 (window as any).showView = showView;
 
 document.getElementById('btn-crawl')?.addEventListener('click', (e) => {
   handleCrawl(e.currentTarget as HTMLButtonElement);
+});
+
+document.getElementById('btn-rank')?.addEventListener('click', (e) => {
+  handleRank(e.currentTarget as HTMLButtonElement);
 });
 
 renderInbox();

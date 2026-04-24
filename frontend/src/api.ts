@@ -42,3 +42,19 @@ export async function processArticle(
 export async function triggerCrawl(): Promise<void> {
   await request('/crawl', { method: 'POST' });
 }
+
+export async function rankArticle(id: string): Promise<Article> {
+  return request<Article>(`/articles/${id}/rank`, { method: 'POST' });
+}
+
+export interface RankInboxResult {
+  ok: boolean;
+  ranked: number;
+  skipped: number;
+  errors: Array<{ id: string; message: string }>;
+}
+
+export async function rankInbox(force = false): Promise<RankInboxResult> {
+  const qs = force ? '?force=true' : '';
+  return request<RankInboxResult>(`/articles/rank${qs}`, { method: 'POST' });
+}

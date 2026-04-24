@@ -68,6 +68,10 @@ function extractItemData(
       reviewedAt: null,
       publishedAt: null,
       wordpressPostId: null,
+      relevanceScore: null,
+      relevanceBucket: null,
+      relevanceRationale: null,
+      rankedAt: null,
     };
   } catch {
     return null;

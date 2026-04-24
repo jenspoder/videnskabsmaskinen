@@ -5,6 +5,7 @@ import { crawlOneSource } from './crawler/crawlOneSource';
 import { crawlRssSource } from './crawler/crawlRssSource';
 import { generateArticle } from './process/bonzai';
 import { createWordPressDraft } from './process/wordpress';
+import { rankArticle } from './process/rankArticle';
 import { Article, SourcesStore, CrawlResult } from './types';
 
 const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
@@ -33,6 +34,8 @@ export async function handler(event: any): Promise<any> {
     if (method === 'GET' && path === '/articles') return handleGetArticles(e);
     if (method === 'PATCH' && path.match(/^\/articles\/[^/]+$/)) return handlePatchArticle(e);
     if (method === 'POST' && path.match(/^\/articles\/[^/]+\/process$/)) return handleProcessArticle(e);
+    if (method === 'POST' && path.match(/^\/articles\/[^/]+\/rank$/)) return handleRankArticle(e);
+    if (method === 'POST' && path === '/articles/rank') return handleRankInbox(e);
     if (method === 'POST' && path === '/crawl') return handlePostCrawl();
 
     return json(404, { error: 'Not found' });
@@ -94,6 +97,51 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2): Promise<APIG
   await moveArticle(id, 'reviewed', article);
 
   return json(200, { article, wordpressPostId: wpId });
+}
+
+async function handleRankArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  const id = event.rawPath.split('/')[2];
+  const article = await loadArticle(id, 'inbox');
+  if (!article) return json(404, { error: 'Artikel ikke fundet i inbox' });
+
+  const updated = await rankAndPersist(article);
+  return json(200, updated);
+}
+
+async function handleRankInbox(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  const force = event.queryStringParameters?.force === 'true';
+  const articles = await listArticlesInFolder('inbox');
+  const targets = force ? articles : articles.filter((a) => a.relevanceScore === null);
+
+  let ranked = 0;
+  const errors: Array<{ id: string; message: string }> = [];
+
+  for (const article of targets) {
+    try {
+      await rankAndPersist(article);
+      ranked++;
+    } catch (error) {
+      errors.push({
+        id: article.id,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  return json(200, { ok: true, ranked, skipped: articles.length - targets.length, errors });
+}
+
+async function rankAndPersist(article: Article): Promise<Article> {
+  const result = await rankArticle(article);
+  const updated: Article = {
+    ...article,
+    relevanceScore: result.score,
+    relevanceBucket: result.bucket,
+    relevanceRationale: result.rationale,
+    rankedAt: new Date().toISOString(),
+  };
+  await saveArticle(updated);
+  return updated;
 }
 
 async function handlePostCrawl(): Promise<APIGatewayProxyResultV2> {
