@@ -1,6 +1,6 @@
 # Plan: Videnskabsmaskinen — fuld AWS-arkitektur
 
-## Status (opdateret 2026-04-24)
+## Status (opdateret 2026-04-27)
 
 ### Færdigt
 - ✅ Backend: Lambda + S3 (`videnskabsmaskinen-articles`) + API Gateway deployet via AWS SAM
@@ -11,7 +11,8 @@
 - ✅ GitHub: Auto-deploy ved push til `main`
 
 ### Mangler
-- 🟡 **Redaktør-flow (demo)**: frontend har **rangering**, **udvælgelse til Til behandling** (localStorage) og **dedikeret Udkast-view** med mock-genereret artikel. Hele flowet kan demonstreres uden backend-ændringer. Backend `POST /articles/rank` og `POST /articles/{id}/process` (Bonzai → WordPress) er kodet, men *Send til WordPress* i UI'et er disabled indtil Lambda-credentials er på plads.
+- 🟡 **Redaktør-flow (demo)**: frontend har **rangering**, **udvælgelse til Til behandling** (localStorage) og **dedikeret Udkast-view** med mock-genereret artikel. Hele flowet kan demonstreres uden backend-ændringer. Backend `POST /articles/rank`, `POST /articles/{id}/generate-draft` og `POST /articles/{id}/process` er kodet, men *Send til WordPress* i UI'et er disabled indtil Lambda-credentials er på plads.
+- 🟡 **Generator-flow (klar i kode, afventer credentials)**: `POST /articles/{id}/generate-draft` kalder Bonzai med Kristoffers prompt A og `fetchArticleBody`, returnerer ren HTML. Frontend kan slå over via `VITE_USE_BACKEND_GENERATION=true`. Bonzai-prompt er versioneret i `backend/prompts/generate-article.md` og inline i `process/generateArticlePrompt.ts`. Setup-guide til Bonzai-assistenten ligger i `backend/prompts/bonzai-setup.md`.
 - ⬜ **S3 `articles/sources.json`**: hold produktions-kildelisten i sync med den version, der ligger i Git — Lambda læser fra S3 ved crawl
 - ⬜ Løbende test af enkelte RSS-URL’er (udgivere ændrer feeds)
 - ⬜ Bonzai API credentials sat i Lambda env vars
@@ -39,10 +40,17 @@ Frontend: https://main.d1w9o0e40lcutv.amplifyapp.com/
 
 Redaktør-flow (planlagt produktion):
 Frontend (Inbox → Til behandling → Udkast) → POST /articles/{id}/process
-    → Bonzai (genererer udkast) → WordPress REST API (draft)
+    → fetchArticleBody (brødtekst fra original-URL)
+    → Bonzai (Kristoffers prompt A) → WordPress REST API (draft)
 
-Rangering (planlagt produktion):
-Lambda → Bonzai (evaluerings-prompt) → felter på artikel-JSON i S3
+Generator-flow (kode klar, afventer credentials):
+Frontend (Udkast-view) → POST /articles/{id}/generate-draft
+    → fetchArticleBody → Bonzai → ren HTML retur
+    → frontend renderer i Udkast-view (uden at sende til WP)
+    Switches via VITE_USE_BACKEND_GENERATION=true; ellers mock.
+
+Rangering (delvist i produktion):
+Lambda → fetchArticleBody → Bonzai (rank-prompt) → felter på artikel-JSON i S3
     → GET /articles viser rank → frontend sorterer/fremhæver
 
 Frontend-demo (i dag, uden backend-afhængigheder):
@@ -89,8 +97,8 @@ Det er **bevidst** for at demoen ikke skal pretendere at være ægte AI-output. 
 
 ### Når Bonzai/WordPress-credentials er på plads
 
-1. Erstat `mockGenerate(...)`-kaldet i `draft.ts` med et kald til `processArticle(id, angle)` (eller en ny dedikeret «generer udkast»-route der returnerer HTML uden at publicere).
-2. Aktivér WP-knappen og fjern tooltip-wrapper i `draft.ts`.
+1. **Bonzai**: Følg `backend/prompts/bonzai-setup.md` for at sætte env vars. Sæt derefter `VITE_USE_BACKEND_GENERATION=true` på Amplify (og lokalt i `frontend/.env.local`) — så bruger Udkast-viewet `POST /articles/{id}/generate-draft` (Kristoffers prompt A + brødtekst via `fetchArticleBody`) i stedet for `mockGenerate`. Statusbadgen i meta-blokken skifter automatisk fra *Demo-udkast* til *Bonzai-udkast*.
+2. **WordPress**: Aktivér WP-knappen i `draft.ts` (fjern `disabled` og tooltip-wrapper), og lad den kalde `processArticle(id, angle)` der allerede laver hele kæden (fetchArticleBody → Bonzai → WP draft).
 3. Beslut om den lokale Til behandling-pulje skal bevares som «kladde-pulje før publicering» eller fjernes til fordel for direkte publicering.
 
 ---
@@ -188,8 +196,10 @@ aws lambda update-function-configuration \
 
 ## Implementeringsrækkefølge (resterende)
 
-1. **Credentials**: Sæt Bonzai + WordPress env vars i Lambda
-2. **Aktivér rangering i produktion**: skift `handleRank` i `frontend/src/main.ts` fra `mockRankArticle` til `rankInbox()` så scoren persisteres i S3
-3. **Aktivér Send til WordPress**: flyt `processArticle(id, angle)` fra Inbox-flowet til Udkast-viewets WP-knap, og enable knappen
-4. **Test fuldt flow**: Crawl → inbox → rangering → Til behandling → Generer udkast → Send → WordPress draft
-5. **Kilder (løbende)**: nye RSS-URL’er, deaktiver ødelagte feeds, hold S3 `sources.json` aligned med beslutninger
+1. **Bonzai-credentials**: Følg `backend/prompts/bonzai-setup.md` — opret evt. assistenten i Bonzai-UI'en, sæt `BONZAI_BASE_URL` / `BONZAI_API_KEY` / `BONZAI_MODEL` på Lambda
+2. **Switch til ægte generator**: Sæt `VITE_USE_BACKEND_GENERATION=true` på Amplify + lokalt → Udkast-viewet kalder `/articles/{id}/generate-draft` i stedet for mock
+3. **Aktivér rangering i produktion**: skift `handleRank` i `frontend/src/main.ts` fra `mockRankArticle` til `rankInbox()` så scoren persisteres i S3
+4. **WordPress-credentials**: Sæt `WORDPRESS_*` env vars på Lambda
+5. **Aktivér Send til WordPress**: flyt `processArticle(id, angle)` fra Inbox-flowet til Udkast-viewets WP-knap, og enable knappen
+6. **Test fuldt flow**: Crawl → inbox → rangering → Til behandling → Generer udkast (Bonzai) → Send → WordPress draft
+7. **Kilder (løbende)**: nye RSS-URL’er, deaktiver ødelagte feeds, hold S3 `sources.json` aligned med beslutninger

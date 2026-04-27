@@ -1,10 +1,13 @@
 import type { SelectedArticle } from '../store';
 import { saveDraft, getDraft } from '../store';
 import { generateMockDraft } from '../mockGenerate';
+import { generateDraft as generateDraftViaApi } from '../api';
 
 export interface DraftViewCallbacks {
   onBack: () => void;
 }
+
+const USE_BACKEND = import.meta.env.VITE_USE_BACKEND_GENERATION === 'true';
 
 export function renderDraftView(
   container: HTMLElement,
@@ -12,8 +15,6 @@ export function renderDraftView(
   callbacks: DraftViewCallbacks
 ): void {
   const { article, angle } = selected;
-  const existing = getDraft(article.id);
-  const html = existing?.html ?? saveDraft(article.id, generateMockDraft(article, angle)).html;
 
   container.innerHTML = '';
 
@@ -45,7 +46,9 @@ export function renderDraftView(
       </div>
       <div class="draft-meta-row">
         <span class="draft-meta-label">Status</span>
-        <span class="draft-meta-value"><span class="demo-tag">Demo-udkast</span></span>
+        <span class="draft-meta-value">
+          <span class="demo-tag">${USE_BACKEND ? 'Bonzai-udkast' : 'Demo-udkast'}</span>
+        </span>
       </div>
     </div>
 
@@ -54,17 +57,58 @@ export function renderDraftView(
 
   container.appendChild(wrapper);
   const body = wrapper.querySelector<HTMLElement>('#draft-body')!;
-  body.innerHTML = html;
+  const regenerateBtn = wrapper.querySelector<HTMLButtonElement>('[data-action="regenerate"]')!;
+
+  const renderHtml = (html: string): void => {
+    body.innerHTML = html;
+  };
+
+  const showLoading = (): void => {
+    body.innerHTML = `<p><em>Genererer artikel via Bonzai…</em></p>`;
+  };
+
+  const showError = (message: string): void => {
+    body.innerHTML = `<p><em>Kunne ikke generere via Bonzai: ${escape(message)}.</em></p><p><em>Falder tilbage til mock-udkastet:</em></p>${generateMockDraft(article, angle)}`;
+  };
+
+  const generate = async (force: boolean): Promise<void> => {
+    if (!force) {
+      const existing = getDraft(article.id);
+      if (existing) {
+        renderHtml(existing.html);
+        return;
+      }
+    }
+
+    if (!USE_BACKEND) {
+      const mock = generateMockDraft(article, angle);
+      saveDraft(article.id, mock);
+      renderHtml(mock);
+      return;
+    }
+
+    regenerateBtn.disabled = true;
+    showLoading();
+    try {
+      const result = await generateDraftViaApi(article.id, angle);
+      saveDraft(article.id, result.html);
+      renderHtml(result.html);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Ukendt fejl';
+      showError(message);
+    } finally {
+      regenerateBtn.disabled = false;
+    }
+  };
+
+  void generate(false);
 
   wrapper.querySelector<HTMLButtonElement>('[data-action="back"]')!
     .addEventListener('click', () => callbacks.onBack());
 
-  wrapper.querySelector<HTMLButtonElement>('[data-action="regenerate"]')!
-    .addEventListener('click', () => {
-      const fresh = generateMockDraft(article, angle);
-      saveDraft(article.id, fresh);
-      body.innerHTML = fresh;
-    });
+  regenerateBtn.addEventListener('click', () => {
+    void generate(true);
+  });
 }
 
 function escape(text: string): string {
