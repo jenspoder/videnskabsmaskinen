@@ -42,7 +42,11 @@ Vinkel
   bedst formidler den centrale pointe i kilden.
 
 Sprog og tone
-- Skriv på godt dansk uden at forsimple fagligheden unødigt.
+- Skriv på godt og ortografisk korrekt dansk uden at forsimple
+  fagligheden unødigt. Stil-instruktioner som «kort», «for unge» eller
+  «uformelt» må aldrig medføre tastefejl, dobbelte bogstaver eller
+  norsk/svensk indslag — ortografi skal altid være korrekt uanset
+  vinkel.
 - Brug ikke-stigmatiserende sprog. Undgå formuleringer som «psykisk
   syge er…», «svage», «defekte», «farlige».
 - Brug «mennesker med depression» frem for «depressive» osv.
