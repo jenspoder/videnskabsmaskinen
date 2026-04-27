@@ -691,6 +691,138 @@
       50%       { opacity: 0.7; }
     }
 
+    /* ── GENERATION LOADER (draft view) ── */
+    .generation-loader {
+      padding: 1.5rem 0 0.5rem;
+      max-width: 540px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .loader-status {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+      min-height: 1.4rem;
+    }
+
+    .loader-status-text {
+      opacity: 0.85;
+      transition: opacity 0.25s ease;
+    }
+    .loader-status-text.fade { opacity: 0; }
+
+    .loader-dot-pulse {
+      position: relative;
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+      box-shadow: 0 0 0 0 var(--accent-mid);
+      animation: loaderDotPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes loaderDotPulse {
+      0%   { box-shadow: 0 0 0 0 var(--accent-mid); transform: scale(1); }
+      70%  { box-shadow: 0 0 0 0.7rem rgba(74,222,128,0); transform: scale(1.2); }
+      100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); transform: scale(1); }
+    }
+
+    .loader-bar {
+      height: 2px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 0.65rem;
+    }
+    .loader-bar-fill {
+      height: 100%;
+      width: 32%;
+      background: linear-gradient(90deg,
+        transparent,
+        var(--accent-mid) 30%,
+        var(--accent) 50%,
+        var(--accent-mid) 70%,
+        transparent);
+      animation: loaderBar 2.6s ease-in-out infinite;
+    }
+    @keyframes loaderBar {
+      0%   { transform: translateX(-120%); }
+      100% { transform: translateX(420%); }
+    }
+
+    .loader-meta {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18rem;
+      opacity: 0.4;
+      display: flex;
+      gap: 0.55rem;
+      align-items: center;
+      margin-bottom: 1.6rem;
+    }
+    .loader-meta .loader-divider { opacity: 0.6; }
+
+    .loader-steps {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      font-size: 0.78rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .loader-step {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      opacity: 0.35;
+      color: rgba(255,255,255,0.65);
+      transition: opacity 0.3s ease, color 0.3s ease;
+    }
+    .loader-step::before {
+      content: '○';
+      font-size: 0.85rem;
+      width: 1rem;
+      text-align: center;
+      opacity: 0.55;
+      line-height: 1;
+    }
+    .loader-step.active {
+      opacity: 0.95;
+      color: var(--accent);
+    }
+    .loader-step.active::before {
+      content: '◐';
+      color: var(--accent);
+      opacity: 1;
+      display: inline-block;
+      animation: loaderStepSpin 1.6s linear infinite;
+    }
+    @keyframes loaderStepSpin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .loader-step.done {
+      opacity: 0.55;
+      color: rgba(255,255,255,0.55);
+    }
+    .loader-step.done::before {
+      content: '✓';
+      color: var(--accent);
+      opacity: 0.85;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .loader-dot-pulse,
+      .loader-bar-fill,
+      .loader-step.active::before {
+        animation: none;
+      }
+    }
+
     /* ── VINKELZONE ── */
     .angle-zone {
       max-height: 0;
