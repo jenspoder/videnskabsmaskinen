@@ -14,6 +14,16 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResultV2 {
   return { statusCode, headers: CORS, body: JSON.stringify(body) };
 }
 
+function strippedPath(event: APIGatewayProxyEventV2): string {
+  const stage = event.requestContext.stage ?? '';
+  const rawPath = event.rawPath;
+  return stage && rawPath.startsWith(`/${stage}`) ? rawPath.slice(stage.length + 1) : rawPath;
+}
+
+function articleIdFromPath(event: APIGatewayProxyEventV2): string {
+  return strippedPath(event).split('/')[2] ?? '';
+}
+
 export async function handler(event: any): Promise<any> {
   // EventBridge scheduled trigger
   if (event.source === 'aws.events') {
@@ -24,9 +34,7 @@ export async function handler(event: any): Promise<any> {
 
   const e = event as APIGatewayProxyEventV2;
   const method = e.requestContext.http.method;
-  const stage = e.requestContext.stage ?? '';
-  const rawPath = e.rawPath;
-  const path = stage && rawPath.startsWith(`/${stage}`) ? rawPath.slice(stage.length + 1) : rawPath;
+  const path = strippedPath(e);
 
   try {
     if (method === 'OPTIONS') return json(200, {});
@@ -53,7 +61,7 @@ async function handleGetArticles(event: APIGatewayProxyEventV2): Promise<APIGate
 }
 
 async function handlePatchArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = event.rawPath.split('/')[2];
+  const id = articleIdFromPath(event);
   const body = event.body ? JSON.parse(event.body) : {};
   const { status, angle } = body as { status?: string; angle?: string };
 
@@ -75,7 +83,7 @@ async function handlePatchArticle(event: APIGatewayProxyEventV2): Promise<APIGat
 }
 
 async function handleProcessArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = event.rawPath.split('/')[2];
+  const id = articleIdFromPath(event);
   const body = event.body ? JSON.parse(event.body) : {};
   const angle: string = body.angle || '';
 
@@ -100,7 +108,7 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2): Promise<APIG
 }
 
 async function handleRankArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = event.rawPath.split('/')[2];
+  const id = articleIdFromPath(event);
   const article = await loadArticle(id, 'inbox');
   if (!article) return json(404, { error: 'Artikel ikke fundet i inbox' });
 
