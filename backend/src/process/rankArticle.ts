@@ -26,7 +26,6 @@ export async function rankArticle(article: Article): Promise<RankResult> {
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: prompt },
     ],
-    response_format: { type: 'json_object' },
   });
 
   const raw = response.choices[0]?.message?.content ?? '';
@@ -81,9 +80,10 @@ async function safeFetchBody(url: string): Promise<string> {
 }
 
 function parseResponse(raw: string): RankResult {
+  const cleaned = stripCodeFence(raw);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(cleaned);
   } catch {
     throw new Error(`Kunne ikke parse rank-svar som JSON: ${raw.slice(0, 200)}`);
   }
@@ -94,6 +94,12 @@ function parseResponse(raw: string): RankResult {
   const rationale = typeof obj.rationale === 'string' ? obj.rationale.trim() : '';
 
   return { score, bucket, rationale };
+}
+
+function stripCodeFence(raw: string): string {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i);
+  return match ? match[1].trim() : trimmed;
 }
 
 function clampScore(value: unknown): number {
