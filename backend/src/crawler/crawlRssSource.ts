@@ -41,7 +41,7 @@ function parseItem(itemXml: string, source: SourceConfig): Article | null {
   if (!url) return null;
 
   const description = extractTag(itemXml, 'description');
-  const teaser = cleanTeaser(stripHtml(description)).slice(0, 500);
+  const teaser = cleanTeaser(stripHtml(description)).slice(0, 5000);
 
   return {
     id: '',

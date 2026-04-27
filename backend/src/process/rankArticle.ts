@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { Article, RelevanceBucket } from '../types';
 import { EDITORIAL_PROFILE } from './editorialProfile';
+import { fetchArticleBody } from './fetchArticleBody';
 
 const client = new OpenAI({
   baseURL: process.env.BONZAI_BASE_URL,
@@ -16,7 +17,8 @@ export interface RankResult {
 }
 
 export async function rankArticle(article: Article): Promise<RankResult> {
-  const prompt = buildPrompt(article);
+  const body = await safeFetchBody(article.url);
+  const prompt = buildPrompt(article, body);
 
   const response = await client.chat.completions.create({
     model: MODEL,
@@ -48,11 +50,16 @@ Brug følgende grænser:
 - 40-69  = "medium"
 - 0-39   = "low"
 
-Vær kritisk og konsistent. Hvis der mangler information (fx tom
-teaser), sænk scoren og nævn det i begrundelsen.
+Vær kritisk og konsistent. Hvis der mangler information (fx både
+tom teaser og ingen brødtekst), sænk scoren og nævn det i
+begrundelsen.
 `.trim();
 
-function buildPrompt(article: Article): string {
+function buildPrompt(article: Article, body: string): string {
+  const bodyBlock = body
+    ? `\nBrødtekst/abstract fra kildeartiklen:\n${body}\n`
+    : '\n(brødtekst kunne ikke hentes)\n';
+
   return `Redaktionsprofil:
 ${EDITORIAL_PROFILE}
 
@@ -60,8 +67,17 @@ Artikel:
 - Titel: ${article.title}
 - Teaser: ${article.teaser || '(ingen teaser)'}
 - Kilde-URL: ${article.url}
-
+${bodyBlock}
 Vurder relevansen og returner kun JSON.`;
+}
+
+async function safeFetchBody(url: string): Promise<string> {
+  try {
+    return await fetchArticleBody(url);
+  } catch (error) {
+    console.warn(`Kunne ikke hente brødtekst fra ${url}:`, error);
+    return '';
+  }
 }
 
 function parseResponse(raw: string): RankResult {
