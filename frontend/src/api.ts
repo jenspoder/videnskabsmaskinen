@@ -7,7 +7,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
-  if (!res.ok) {
+  // 202 (Accepted) er en gyldig succes-status for asynkrone jobs.
+  if (!res.ok && res.status !== 202) {
     const text = await res.text().catch(() => '');
     throw new Error(`API fejl ${res.status}: ${text}`);
   }
@@ -39,20 +40,76 @@ export async function processArticle(
   });
 }
 
-export interface GenerateDraftResult {
+export interface GenerateDraftJob {
+  jobId: string;
   articleId: string;
-  title: string;
-  sourceUrl: string;
-  angle: string;
-  html: string;
-  generatedAt: string;
+  status: 'pending' | 'completed' | 'failed';
+  title?: string;
+  sourceUrl?: string;
+  angle?: string;
+  html?: string;
+  bodyFetched?: boolean;
+  error?: string;
+  createdAt: string;
+  finishedAt?: string;
 }
 
-export async function generateDraft(id: string, angle: string): Promise<GenerateDraftResult> {
-  return request<GenerateDraftResult>(`/articles/${id}/generate-draft`, {
+/**
+ * Starter en asynkron Bonzai-generering. Returnerer et jobId straks.
+ * Brug pollGenerateDraft() til at hente det færdige resultat.
+ */
+export async function startGenerateDraft(id: string, angle: string): Promise<{ jobId: string }> {
+  return request<{ jobId: string }>(`/articles/${id}/generate-draft`, {
     method: 'POST',
     body: JSON.stringify({ angle }),
   });
+}
+
+export async function getDraftJob(jobId: string): Promise<GenerateDraftJob> {
+  return request<GenerateDraftJob>(`/jobs/${jobId}`);
+}
+
+/**
+ * Poller et generation-job til det er completed eller failed. Default
+ * timeout er 90s med poll-interval på 2.5s. onProgress kaldes på hvert
+ * tjek - brug det til at vise en spinner i UI'en.
+ */
+export async function pollGenerateDraft(
+  jobId: string,
+  options: { intervalMs?: number; timeoutMs?: number; onProgress?: (job: GenerateDraftJob) => void } = {}
+): Promise<GenerateDraftJob> {
+  const interval = options.intervalMs ?? 2500;
+  const timeout = options.timeoutMs ?? 180_000;
+  const start = Date.now();
+
+  while (true) {
+    const job = await getDraftJob(jobId);
+    options.onProgress?.(job);
+
+    if (job.status === 'completed' || job.status === 'failed') return job;
+
+    if (Date.now() - start > timeout) {
+      throw new Error(`Timeout efter ${Math.round(timeout / 1000)}s - jobbet kører stadig`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+}
+
+/**
+ * Convenience wrapper: start + poll til færdig. Bruges fra draft-viewet
+ * når man bare vil have HTML'en.
+ */
+export async function generateDraft(
+  id: string,
+  angle: string,
+  onProgress?: (job: GenerateDraftJob) => void
+): Promise<GenerateDraftJob> {
+  const { jobId } = await startGenerateDraft(id, angle);
+  const job = await pollGenerateDraft(jobId, { onProgress });
+  if (job.status === 'failed') {
+    throw new Error(job.error ?? 'Generering fejlede uden fejlmeddelelse');
+  }
+  return job;
 }
 
 export async function triggerCrawl(): Promise<void> {

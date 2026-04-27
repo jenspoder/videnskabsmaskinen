@@ -20,24 +20,34 @@ export interface GenerateOptions {
  * Genererer en populærvidenskabelig artikel ud fra en kilde og en
  * redaktionel vinkel. Returnerer ren HTML.
  *
- * Prompt-tekst er defineret i ./generateArticlePrompt.ts og holdes i
- * sync med backend/prompts/generate-article.md (sandhedskilden for
- * Bonzai-assistenten i Bonzai-UI'en).
+ * Understøtter to opsætninger styret af BONZAI_MODEL:
+ *
+ *   Vej A: BONZAI_MODEL=claude-sonnet-4-5 (eller anden ren model)
+ *   - BONZAI_BASE_URL skal pege på .../v1
+ *   - Vi sender system-prompt fra generateArticlePrompt.ts
+ *
+ *   Vej B: BONZAI_MODEL=agent_xxx (en Bonzai-assistent)
+ *   - BONZAI_BASE_URL skal pege på .../assistants
+ *   - Vi sender KUN user-message; assistenten har sin egen instruction
+ *     defineret i Bonzai-UI'en (og holdes i sync med generate-article.md
+ *     som backup i Git).
  */
 export async function generateArticle(
   input: GenerateUserMessageInput,
   options: GenerateOptions = {}
 ): Promise<string> {
   const userMessage = buildGenerateUserMessage(input);
+  const isAssistant = MODEL.startsWith('agent_');
+
+  const messages = isAssistant
+    ? [{ role: 'user' as const, content: userMessage }]
+    : [
+        { role: 'system' as const, content: GENERATE_SYSTEM_PROMPT },
+        { role: 'user' as const, content: userMessage },
+      ];
 
   const response = await client.chat.completions.create(
-    {
-      model: MODEL,
-      messages: [
-        { role: 'system', content: GENERATE_SYSTEM_PROMPT },
-        { role: 'user', content: userMessage },
-      ],
-    },
+    { model: MODEL, messages },
     { signal: options.signal }
   );
 
