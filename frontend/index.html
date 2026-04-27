@@ -232,6 +232,343 @@
       gap: 0.75rem;
     }
 
+    .section-actions {
+      display: inline-flex;
+      gap: 0.5rem;
+    }
+
+    /* ── RANGERING ── */
+    .rank-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18rem;
+      font-weight: 600;
+      padding: 0.18rem 0.5rem 0.18rem 0.35rem;
+      border-radius: 3px;
+      margin-bottom: 0.6rem;
+      background-color: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.45);
+    }
+    .rank-badge .rank-score {
+      font-size: 0.72rem;
+      letter-spacing: 0;
+      padding: 0.05rem 0.35rem;
+      background-color: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      min-width: 1.6rem;
+      text-align: center;
+    }
+    .rank-badge.rank-high {
+      background-color: var(--accent-dim);
+      color: var(--accent);
+    }
+    .rank-badge.rank-high .rank-score { background-color: var(--accent-mid); }
+    .rank-badge.rank-medium {
+      background-color: rgba(250,204,21,0.12);
+      color: #facc15;
+    }
+    .rank-badge.rank-medium .rank-score { background-color: rgba(250,204,21,0.22); }
+    .rank-badge.rank-low {
+      background-color: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.35);
+    }
+    .rank-badge.rank-pending {
+      background-color: transparent;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.3);
+      padding: 0.18rem 0.55rem;
+    }
+
+    .card-rationale {
+      font-size: 0.78rem;
+      line-height: 1.5;
+      opacity: 0.55;
+      font-style: italic;
+      margin: -0.25rem 0 0.85rem;
+      padding-left: 0.6rem;
+      border-left: 2px solid rgba(255,255,255,0.1);
+    }
+
+    /* ── TIL BEHANDLING ── */
+    .selected-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+
+    .selected-card {
+      background-color: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 4px;
+      padding: 1.1rem 1.4rem 1.2rem;
+      animation: fadeIn 0.25s ease;
+    }
+    .selected-card:hover { border-color: rgba(255,255,255,0.2); }
+
+    .selected-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.85rem;
+    }
+    .selected-title-block { min-width: 0; flex: 1; }
+    .selected-title-link {
+      text-decoration: none;
+      color: inherit;
+    }
+    .selected-title-link:hover .selected-title {
+      color: var(--accent);
+    }
+    .selected-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.09rem;
+      line-height: 1.4;
+      margin-bottom: 0.4rem;
+      transition: color 0.15s ease;
+    }
+
+    .draft-badge {
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18rem;
+      font-weight: 600;
+      padding: 0.22rem 0.55rem;
+      border-radius: 3px;
+      background-color: rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.35);
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .draft-badge.has-draft {
+      background-color: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .selected-angle {
+      background-color: rgba(255,255,255,0.025);
+      border-left: 2px solid var(--accent-mid);
+      padding: 0.6rem 0.85rem;
+      border-radius: 2px;
+      margin-bottom: 0.95rem;
+    }
+    .selected-angle-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+    }
+    .selected-angle-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2rem;
+      opacity: 0.45;
+    }
+    .selected-angle-edit {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.5);
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18rem;
+      cursor: pointer;
+      padding: 0.15rem 0.35rem;
+      border-radius: 2px;
+      transition: color 0.15s ease, background-color 0.15s ease;
+    }
+    .selected-angle-edit:hover {
+      color: var(--accent);
+      background-color: rgba(255,255,255,0.04);
+    }
+    .selected-angle-text {
+      font-size: 0.85rem;
+      line-height: 1.5;
+      opacity: 0.85;
+    }
+    .selected-angle-edit-zone {
+      display: none;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+    .selected-angle-edit-zone .angle-input {
+      width: 100%;
+      background-color: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: inherit;
+      font-family: inherit;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      padding: 0.55rem 0.7rem;
+      border-radius: 3px;
+      resize: vertical;
+      min-height: 4rem;
+    }
+    .selected-angle-edit-zone .angle-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .selected-angle-edit-buttons {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .selected-angle[data-mode="edit"] .selected-angle-text,
+    .selected-angle[data-mode="edit"] .selected-angle-edit {
+      display: none;
+    }
+    .selected-angle[data-mode="edit"] .selected-angle-edit-zone {
+      display: flex;
+    }
+
+    .selected-actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    /* ── UDKAST-VIEW ── */
+    .draft-view {
+      animation: fadeIn 0.25s ease;
+    }
+
+    .draft-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .draft-toolbar-right {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+    }
+
+    .wp-button-wrapper {
+      position: relative;
+      display: inline-flex;
+    }
+    .wp-button-wrapper button[disabled] {
+      cursor: not-allowed;
+    }
+    .wp-button-wrapper:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      top: calc(100% + 0.5rem);
+      right: 0;
+      background-color: #2a3035;
+      color: rgba(255,255,255,0.85);
+      font-size: 0.7rem;
+      letter-spacing: 0;
+      text-transform: none;
+      padding: 0.55rem 0.75rem;
+      border-radius: 4px;
+      width: 18rem;
+      line-height: 1.4;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .draft-meta {
+      background-color: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 4px;
+      padding: 0.85rem 1.1rem;
+      margin-bottom: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .draft-meta-row {
+      display: flex;
+      gap: 0.85rem;
+      align-items: baseline;
+      font-size: 0.78rem;
+    }
+    .draft-meta-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2rem;
+      opacity: 0.4;
+      min-width: 4.5rem;
+    }
+    .draft-meta-value { opacity: 0.85; line-height: 1.45; }
+
+    .draft-source-link {
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 1px dotted rgba(255,255,255,0.3);
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+    .draft-source-link:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .demo-tag {
+      display: inline-block;
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18rem;
+      font-weight: 600;
+      background-color: rgba(250,204,21,0.15);
+      color: #facc15;
+      padding: 0.18rem 0.55rem;
+      border-radius: 3px;
+    }
+
+    .draft-body {
+      font-size: 1rem;
+      line-height: 1.7;
+      max-width: 680px;
+    }
+    .draft-body h1 {
+      font-size: 1.6rem;
+      line-height: 1.3;
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+    .draft-body h2 {
+      font-size: 1.05rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15rem;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      font-weight: 600;
+      opacity: 0.75;
+    }
+    .draft-body p {
+      margin-bottom: 1.1rem;
+      opacity: 0.9;
+    }
+    .draft-body p.lede {
+      font-size: 1.1rem;
+      line-height: 1.55;
+      opacity: 0.7;
+      border-left: 2px solid var(--accent-mid);
+      padding-left: 0.95rem;
+      margin-bottom: 1.5rem;
+    }
+    .draft-body p.source-note {
+      margin-top: 2rem;
+      font-size: 0.75rem;
+      opacity: 0.4;
+    }
+    .draft-body a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid var(--accent-dim);
+      transition: border-color 0.15s ease;
+    }
+    .draft-body a:hover {
+      border-bottom-color: var(--accent);
+    }
+
     /* ── KNAPPER ── */
     button {
       appearance: none;
@@ -524,6 +861,9 @@
       <a class="nav-link active" id="nav-inbox" onclick="showView('inbox')">
         Inbox <span class="nav-badge" id="inbox-badge">—</span>
       </a>
+      <a class="nav-link" id="nav-til-behandling" onclick="showView('til-behandling')">
+        Til behandling <span class="nav-badge" id="til-behandling-badge">—</span>
+      </a>
       <a class="nav-link" id="nav-arkiv" onclick="showView('arkiv')">
         Arkiv <span class="nav-badge" id="arkiv-badge">—</span>
       </a>
@@ -536,7 +876,10 @@
     <div class="view active" id="view-inbox">
       <div class="section-heading">
         <span>Nye artikler fra videnskabskilder</span>
-        <button class="btn-crawl" id="btn-crawl">Crawl nu</button>
+        <span class="section-actions">
+          <button class="btn-crawl" id="btn-rank">Ranger alle</button>
+          <button class="btn-crawl" id="btn-crawl">Crawl nu</button>
+        </span>
       </div>
       <div id="inbox-loading" class="loading-pulse">Henter artikler…</div>
       <div class="article-list" id="article-list"></div>
@@ -549,6 +892,21 @@
         <div class="done-title">Puljen er gennemgået</div>
         <div class="done-text">Du er igennem alle artikler i denne pulje.</div>
       </div>
+    </div>
+
+    <!-- TIL BEHANDLING -->
+    <div class="view" id="view-til-behandling">
+      <div class="section-heading">
+        <span>Artikler til behandling</span>
+      </div>
+      <div class="selected-list" id="selected-list">
+        <div class="archive-empty">Ingen artikler valgt endnu. Gå til Inbox og tryk «Behold».</div>
+      </div>
+    </div>
+
+    <!-- UDKAST (åbnes fra Til behandling) -->
+    <div class="view" id="view-udkast">
+      <div id="draft-container"></div>
     </div>
 
     <!-- ARKIV -->

@@ -1,17 +1,19 @@
 # Plan: Videnskabsmaskinen — fuld AWS-arkitektur
 
-## Status (opdateret 2026-04-21)
+## Status (opdateret 2026-04-24)
 
 ### Færdigt
 - ✅ Backend: Lambda + S3 (`videnskabsmaskinen-articles`) + API Gateway deployet via AWS SAM
 - ✅ EventBridge: Crawler kører automatisk hver 6. time
 - ✅ Frontend: Vite + TypeScript deployet på Amplify (`https://main.d1w9o0e40lcutv.amplifyapp.com/`)
-- ✅ Crawler: Videnskab.dk (HTML) kører, 16 artikler i inbox
+- ✅ Crawler: **RSS** (`crawlRssSource.ts`, `type: "rss"` i kilder) + **HTML** (`crawlOneSource`) — `runCrawl()` vælger ud fra `source.type`
+- ✅ **Kildelisten** i repo: flere RSS-feeds fra psykiatri- og psykologi-tidsskrifter i `backend/sources.json` (grupperet med `customerId` i filen)
 - ✅ GitHub: Auto-deploy ved push til `main`
 
 ### Mangler
-- ⬜ RSS-understøttelse i crawler (se nedenfor)
-- ⬜ Kildeliste defineret og testet
+- 🟡 **Redaktør-flow (demo)**: frontend har **rangering**, **udvælgelse til Til behandling** (localStorage) og **dedikeret Udkast-view** med mock-genereret artikel. Hele flowet kan demonstreres uden backend-ændringer. Backend `POST /articles/rank` og `POST /articles/{id}/process` (Bonzai → WordPress) er kodet, men *Send til WordPress* i UI'et er disabled indtil Lambda-credentials er på plads.
+- ⬜ **S3 `articles/sources.json`**: hold produktions-kildelisten i sync med den version, der ligger i Git — Lambda læser fra S3 ved crawl
+- ⬜ Løbende test af enkelte RSS-URL’er (udgivere ændrer feeds)
 - ⬜ Bonzai API credentials sat i Lambda env vars
 - ⬜ WordPress credentials sat i Lambda env vars
 - ⬜ Test af fuldt process-article flow (Bonzai → WordPress)
@@ -35,36 +37,131 @@ API Gateway: https://30bw0tkv7k.execute-api.eu-west-1.amazonaws.com/prod
 Frontend: https://main.d1w9o0e40lcutv.amplifyapp.com/
     → auto-deploy fra GitHub main via Amplify
 
-"Send"-flow:
-Frontend → POST /articles/{id}/process → Bonzai API → WordPress REST API (draft)
+Redaktør-flow (planlagt produktion):
+Frontend (Inbox → Til behandling → Udkast) → POST /articles/{id}/process
+    → Bonzai (genererer udkast) → WordPress REST API (draft)
+
+Rangering (planlagt produktion):
+Lambda → Bonzai (evaluerings-prompt) → felter på artikel-JSON i S3
+    → GET /articles viser rank → frontend sorterer/fremhæver
+
+Frontend-demo (i dag, uden backend-afhængigheder):
+Inbox → "Behold" + vinkel → localStorage (Til behandling)
+    → "Generer udkast" → mockGenerate.ts → localStorage (udkast)
+    → Udkast-view → "Send til WordPress" (disabled, afventer credentials)
 ```
 
 ---
 
-## Næste: RSS-understøttelse i crawler
+## Redaktør-flow i frontend (demo)
 
-### Hvorfor RSS
-- Stabil struktur — ingen CSS-selektorer der går i stykker ved redesign
-- Titel, beskrivelse, URL og dato ud af boksen
-- De fleste WordPress-sites har `/feed/` som standard (inkl. Poder)
-- Bruges til kilder der har RSS — HTML-crawleren beholdes til resten
+### Formål
+
+- Vise det fulde redaktør-flow — fra triage til udkast — uden at vente på Bonzai- og WordPress-credentials i Lambda.
+- Hele state ligger i `localStorage`, så demoen overlever reload, men intet skrives til S3.
+
+### Flow
+
+| Skridt | Hvor | Hvad |
+|---|---|---|
+| 1. Triage | **Inbox** | Artikler vises sorteret efter relevans (mock-rang). «Ignorer» kalder backend `PATCH`. «Behold + vinkel» flytter artiklen *lokalt* til Til behandling — intet API-kald. |
+| 2. Udvælgelse | **Til behandling** (nyt nav-link) | Liste over valgte artikler med vinkel. Vinklen kan **inline-redigeres** (Rediger-knap → textarea → Gem); ved ændret vinkel slettes evt. eksisterende udkast så det regenereres med ny instruktion. Knapper: «Generer udkast» / «Åbn udkast», «Returner til inbox». |
+| 3. Generering | **Udkast-view** (dedikeret) | `mockGenerate.ts` producerer en dansk populariseret artikel ud fra titel + teaser + vinkel. Tydeligt mærket «Demo-udkast». Kilde og «Læs videre» linker til originalen. |
+| 4. Publish | **Udkast-view** | «Send til WordPress» er disabled med tooltip: kræver Bonzai- og WordPress-credentials i Lambda. |
+
+### Begrænsninger ved mock-generatoren
+
+`mockGenerate.ts` er **ikke en LLM** — det er ren string-skabelon. Den indsætter `title`, `teaser` og `angle` som substrings i et fast layout (rubrik + lede + 5 sektioner + closer). Konsekvenser:
+
+- **Vinklen styrer ikke tone/stil/struktur.** Skriver redaktøren «omformuler til piratsprog», får man ordret sætningen «Redaktionelt har vi valgt at lægge vægt på omformuler indhold til piratsprog» — den faste tekst rundt om er uændret.
+- **To af de fem sektioner er 100% statiske** («Sådan bør resultaterne læses», «Hvad det kan betyde i praksis») og ens på tværs af alle artikler.
+- **Ingen domæneforståelse, ingen syntese, ingen omskrivning.** Teaseren gengives ordret.
+
+Det er **bevidst** for at demoen ikke skal pretendere at være ægte AI-output. Tagget «Demo-udkast» i Udkast-viewets meta-blok signalerer dette. Reelt indhold kommer først når `processArticle(id, angle)`-routen i Lambda får Bonzai-credentials.
+
+### Filer
+
+- `frontend/src/store.ts` — localStorage-persistence af udvalgte artikler og udkast (`getSelected`, `addSelected`, `removeSelected`, `updateAngle`, `getDraft`, `saveDraft`)
+- `frontend/src/mockGenerate.ts` — skabelon-baseret artikel-generator (rubrik, lede, mellemrubrikker, kilde-note)
+- `frontend/src/components/selected.ts` — kort i Til behandling-listen, inkl. inline-redigering af vinkel
+- `frontend/src/components/draft.ts` — udkast-view med toolbar og artikel-typografi
+- `frontend/src/utils/text.ts` — `cleanTeaser` der striper inline metadata fra ScienceDirect-/Elsevier-feeds (`Publication date:`, `Source:`, `Author(s):`)
+
+### Når Bonzai/WordPress-credentials er på plads
+
+1. Erstat `mockGenerate(...)`-kaldet i `draft.ts` med et kald til `processArticle(id, angle)` (eller en ny dedikeret «generer udkast»-route der returnerer HTML uden at publicere).
+2. Aktivér WP-knappen og fjern tooltip-wrapper i `draft.ts`.
+3. Beslut om den lokale Til behandling-pulje skal bevares som «kladde-pulje før publicering» eller fjernes til fordel for direkte publicering.
+
+---
+
+## Redaktør-rangering (relevans)
+
+### Formål
+
+- Evaluere indkomne artikler og give dem en **rang eller score** efter relevans for redaktionen, så arbejdstriage bliver lettere.
+
+### Mål
+
+- Hver (ny) artikel — eller hele inbox på kommando — **evalueres** mod en aftalt **redaktionsprofil** (temaer, målgruppe, hvad redaktionen typisk dækker / ikke dækker).
+- Output: fx **numerisk score** (0–100), **kort begrundelse** til redaktøren, og evt. **etiket** (fx «høj/mellem/lav»).
+- **Frontend**: artikler vises sorteret efter relevans (eller med tydelig markering), så redaktøren ser de vigtigste først.
+
+### Er backend klar?
+
+**Delvist.** Den eksisterende arkitektur giver et godt udgangspunkt:
+
+| Findes i dag | Bruges til rangering |
+|----------------|----------------------|
+| Lambda + S3 pr. artikel (`inbox/<id>.json`) | Gemme `relevanceScore`, `relevanceRationale`, `rankedAt` (navne TBD) |
+| `GET /articles`, `PATCH /articles/{id}` | Udvides til at returnere/opdatere rank-felter |
+| `process/bonzai.ts` (OpenAI-kompatibel klient) | Samme API-nøgle/base URL som til artikelgenerering; ny funktion fx `evaluateArticleRelevance(...)` |
+| Crawl slutter med `saveArticle` | Valgfrit: kør ranking **efter** hver ny artikel, eller **batch** via nyt endpoint |
+
+**Det findes ikke endnu:** felter på `Article` i `types.ts`, persistens i JSON, prompt + parsing af struktureret svar, API-route (fx `POST /articles/rank` eller ranking i crawl), og UI-sortering.
+
+**Afhængighed:** Bonzai-credentials i Lambda skal virke før rangering kan køre i produktion; ved lokal udvikling kan samme API testes via env vars.
 
 ### Implementering
-Tilføj `type: "rss" | "html"` i `sources.json` per kilde.
 
-Ny fil: `backend/src/crawler/crawlRssSource.ts`
-- Henter RSS-feed med `fetch()`
-- Parser XML med en lille regex/string-parser (ingen ekstra dependency)
-- Returnerer samme `Article`-array som `crawlOneSource`
+**Frontend-demo (på plads):**
+- `frontend/src/mockRank.ts` — deterministisk keyword-heuristik (psykiatri-/psykologi-termer + RCT/metaanalyse positivt, pressemeddelelser/dyrestudier negativt) der giver score 0–100, bucket og rationale.
+- `Ranger alle`-knap kører mock i memory og sorterer listen.
+- Bruges til at vise konceptet uden Bonzai; resultatet persisteres ikke i S3 og forsvinder ved reload.
 
-`handler.ts` → `runCrawl()` vælger parser baseret på `source.type`.
+**Backend (klar, afventer credentials):**
+1. `backend/src/process/editorialProfile.ts` — redaktionsprofil-tekst.
+2. `backend/src/process/rankArticle.ts` — kalder modellen med titel, teaser og URL; kræver JSON-svar med `score`, `bucket`, `rationale`.
+3. `Article`-type + S3 — opdateret JSON skrives tilbage til samme nøgle i `inbox/` med `relevanceScore`, `relevanceBucket`, `relevanceRationale`, `rankedAt`.
+4. Trigger via `POST /articles/{id}/rank` (én artikel) eller `POST /articles/rank` (batch over inbox; `?force=true` for re-rank).
+5. Når Bonzai-credentials er på plads i Lambda: skift `handleRank` i `frontend/src/main.ts` til at kalde `rankInbox()` fra `api.ts` i stedet for mock.
 
-### Kilder (TBD — defineres løbende)
+### Åbne produktspørgsmål
+
+- Skal gamle artikler **om-rangeres** ved ændring af profil, eller kun nye?
+- Tolerance for **hallucineret** relevans — altid menneskelig endelig vurdering; rank er **prioriteringshjælp**.
+
+---
+
+## Crawler: RSS (implementeret)
+
+RSS giver stabil struktur (titel, teaser, link) uden skrøbelige HTML-selektorer. **HTML-crawlen** findes stadig til kilder uden brugbart feed.
+
+| Del | Status |
+|-----|--------|
+| `backend/src/crawler/crawlRssSource.ts` | Henter feed med `fetch()`, parser `<item>` med let string/regex-parser. Renser teaseren for inline metadata (`Publication date:`, `Source:`, `Author(s):`) før den skrives til S3 |
+| `handler.ts` → `runCrawl()` | `source.type === 'rss'` → RSS, ellers HTML |
+| `backend/sources.json` | Flere RSS-kilder (fx JAMA Psychiatry, Biological Psychiatry, Lancet Psychiatry, …) under én kunde |
+
+**Runtime:** Lambda læser kilder fra **`articles/sources.json` i S3** — ved ændring af kilder skal den fil opdateres (eller holdes i sync med Git), ellers kører produktion med gamle kilder.
+
+### Eksempel-kilder (også muligt ved siden af tidsskrifter)
+
 | Kilde | Type | URL |
 |---|---|---|
 | Videnskab.dk | HTML | `https://videnskab.dk/seneste-nyt/` |
-| Poder (WordPress) | RSS | `https://poder.dk/feed/` |
-| Øvrige | TBD | TBD |
+| WordPress-sites | RSS | typisk `/feed/` |
+| Tidsskrifter | RSS | per udgiver (som i `sources.json` i dag) |
 
 ---
 
@@ -91,7 +188,8 @@ aws lambda update-function-configuration \
 
 ## Implementeringsrækkefølge (resterende)
 
-1. **RSS-crawler**: `crawlRssSource.ts` + `type`-felt i `sources.json`
-2. **Kildeliste**: Definer og test kilder med rigtige selektorer/RSS-URLs
-3. **Credentials**: Sæt Bonzai + WordPress env vars i Lambda
-4. **Test fuldt flow**: Crawl → inbox → Send → WordPress draft
+1. **Credentials**: Sæt Bonzai + WordPress env vars i Lambda
+2. **Aktivér rangering i produktion**: skift `handleRank` i `frontend/src/main.ts` fra `mockRankArticle` til `rankInbox()` så scoren persisteres i S3
+3. **Aktivér Send til WordPress**: flyt `processArticle(id, angle)` fra Inbox-flowet til Udkast-viewets WP-knap, og enable knappen
+4. **Test fuldt flow**: Crawl → inbox → rangering → Til behandling → Generer udkast → Send → WordPress draft
+5. **Kilder (løbende)**: nye RSS-URL’er, deaktiver ødelagte feeds, hold S3 `sources.json` aligned med beslutninger
