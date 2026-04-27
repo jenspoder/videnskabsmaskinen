@@ -1,6 +1,7 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import * as crypto from 'crypto';
-import { loadJsonOrDefault, saveArticle, loadArticle, listArticlesInFolder, moveArticle, SOURCES_KEY } from './s3Store';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
+import { loadJsonOrDefault, saveJson, saveArticle, loadArticle, listArticlesInFolder, moveArticle, SOURCES_KEY } from './s3Store';
 import { crawlOneSource } from './crawler/crawlOneSource';
 import { crawlRssSource } from './crawler/crawlRssSource';
 import { generateArticle } from './process/bonzai';
@@ -8,6 +9,34 @@ import { createWordPressDraft } from './process/wordpress';
 import { rankArticle } from './process/rankArticle';
 import { fetchArticleBody } from './process/fetchArticleBody';
 import { Article, SourcesStore, CrawlResult } from './types';
+
+const lambdaClient = new LambdaClient({});
+
+interface GenerateJobEvent {
+  source: 'self.async-job';
+  job: 'generate-draft';
+  jobId: string;
+  articleId: string;
+  angle: string;
+}
+
+interface GenerateJobState {
+  jobId: string;
+  articleId: string;
+  status: 'pending' | 'completed' | 'failed';
+  title?: string;
+  sourceUrl?: string;
+  angle?: string;
+  html?: string;
+  bodyFetched?: boolean;
+  error?: string;
+  createdAt: string;
+  finishedAt?: string;
+}
+
+function jobKey(jobId: string): string {
+  return `jobs/${jobId}.json`;
+}
 
 const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
 
@@ -29,6 +58,14 @@ export async function handler(event: any): Promise<any> {
     return result;
   }
 
+  // Self-async-invoke: kør tunge generate-draft jobs uden for API Gateway's
+  // 30s timeout. Resultatet skrives til S3 under jobs/{jobId}.json og
+  // klienten henter det via GET /jobs/{jobId}.
+  if (event.source === 'self.async-job' && event.job === 'generate-draft') {
+    await runGenerateDraftJob(event as GenerateJobEvent);
+    return { ok: true };
+  }
+
   const e = event as APIGatewayProxyEventV2;
   const method = e.requestContext.http.method;
   const path = strippedPath(e);
@@ -37,6 +74,9 @@ export async function handler(event: any): Promise<any> {
     if (method === 'OPTIONS') return json(200, {});
 
     if (method === 'GET' && path === '/articles') return handleGetArticles(e);
+
+    const jobIdMatch = path.match(/^\/jobs\/([^/]+)$/);
+    if (method === 'GET' && jobIdMatch) return handleGetJob(jobIdMatch[1]);
 
     const articleIdMatch = path.match(/^\/articles\/([^/]+)(\/.*)?$/);
     const id = articleIdMatch?.[1] ?? '';
@@ -117,10 +157,18 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2, id: string): 
 }
 
 /**
- * Genererer kun et udkast og returnerer HTML uden at gemme/flytte
- * artiklen eller sende til WordPress. Bruges af frontend Udkast-viewet,
- * så vi kan teste Bonzai-generation uden at WordPress-credentials skal
- * være på plads.
+ * Starter en asynkron generering af udkast.
+ *
+ * Bonzai-assistenten kan tage 30-60s at svare, hvilket overskrider API
+ * Gateway HTTP API's 30s-timeout. I stedet:
+ *   1. Returnér 202 + jobId med det samme.
+ *   2. Self-invoke Lambda asynkront (InvocationType=Event) til at køre
+ *      det tunge Bonzai-kald uden HTTP-timeout.
+ *   3. Frontend poller GET /jobs/{jobId} indtil status='completed'.
+ *
+ * Den tidligere blokerende synkrone variant er bevaret som
+ * runGenerateDraftSync() længere nede - kun til lokal test og som
+ * fallback hvis self-invoke fejler.
  */
 async function handleGenerateDraft(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
   const body = event.body ? JSON.parse(event.body) : {};
@@ -130,24 +178,98 @@ async function handleGenerateDraft(event: APIGatewayProxyEventV2, id: string): P
   if (!article) article = await loadArticle(id, 'reviewed');
   if (!article) return json(404, { error: 'Artikel ikke fundet' });
 
-  const articleBody = await safeFetchBody(article.url);
-  const html = await generateArticle({
-    title: article.title,
-    teaser: article.teaser,
-    url: article.url,
-    angle,
-    body: articleBody,
-  });
-
-  return json(200, {
-    articleId: article.id,
+  const jobId = crypto.randomUUID();
+  const initialState: GenerateJobState = {
+    jobId,
+    articleId: id,
+    status: 'pending',
     title: article.title,
     sourceUrl: article.url,
     angle,
-    html,
-    bodyFetched: articleBody.length > 0,
-    generatedAt: new Date().toISOString(),
-  });
+    createdAt: new Date().toISOString(),
+  };
+  await saveJson(jobKey(jobId), initialState);
+
+  const functionName = process.env.AWS_LAMBDA_FUNCTION_NAME;
+  if (!functionName) {
+    return json(500, { error: 'Lambda-navnet ikke tilgængeligt - kan ikke starte async job' });
+  }
+
+  const payload: GenerateJobEvent = {
+    source: 'self.async-job',
+    job: 'generate-draft',
+    jobId,
+    articleId: id,
+    angle,
+  };
+
+  await lambdaClient.send(
+    new InvokeCommand({
+      FunctionName: functionName,
+      InvocationType: 'Event',
+      Payload: Buffer.from(JSON.stringify(payload)),
+    })
+  );
+
+  return json(202, { jobId, status: 'pending' });
+}
+
+async function handleGetJob(jobId: string): Promise<APIGatewayProxyResultV2> {
+  const job = await loadJsonOrDefault<GenerateJobState | null>(jobKey(jobId), null);
+  if (!job) return json(404, { error: 'Job ikke fundet' });
+  return json(200, job);
+}
+
+async function runGenerateDraftJob(payload: GenerateJobEvent): Promise<void> {
+  const { jobId, articleId, angle } = payload;
+  const baseState = (await loadJsonOrDefault<GenerateJobState | null>(jobKey(jobId), null)) ?? {
+    jobId,
+    articleId,
+    status: 'pending' as const,
+    createdAt: new Date().toISOString(),
+  };
+
+  let article = await loadArticle(articleId, 'inbox');
+  if (!article) article = await loadArticle(articleId, 'reviewed');
+  if (!article) {
+    await saveJson(jobKey(jobId), {
+      ...baseState,
+      status: 'failed',
+      error: 'Artikel ikke fundet',
+      finishedAt: new Date().toISOString(),
+    } satisfies GenerateJobState);
+    return;
+  }
+
+  try {
+    const articleBody = await safeFetchBody(article.url);
+    const html = await generateArticle({
+      title: article.title,
+      teaser: article.teaser,
+      url: article.url,
+      angle,
+      body: articleBody,
+    });
+
+    await saveJson(jobKey(jobId), {
+      ...baseState,
+      status: 'completed',
+      title: article.title,
+      sourceUrl: article.url,
+      angle,
+      html,
+      bodyFetched: articleBody.length > 0,
+      finishedAt: new Date().toISOString(),
+    } satisfies GenerateJobState);
+  } catch (error) {
+    console.error(`Job ${jobId} fejlede:`, error);
+    await saveJson(jobKey(jobId), {
+      ...baseState,
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      finishedAt: new Date().toISOString(),
+    } satisfies GenerateJobState);
+  }
 }
 
 /**

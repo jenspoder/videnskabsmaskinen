@@ -2,6 +2,7 @@ import type { SelectedArticle } from '../store';
 import { saveDraft, getDraft } from '../store';
 import { generateMockDraft } from '../mockGenerate';
 import { generateDraft as generateDraftViaApi } from '../api';
+import type { GenerateDraftJob } from '../api';
 
 export interface DraftViewCallbacks {
   onBack: () => void;
@@ -63,8 +64,8 @@ export function renderDraftView(
     body.innerHTML = html;
   };
 
-  const showLoading = (): void => {
-    body.innerHTML = `<p><em>Genererer artikel via Bonzai…</em></p>`;
+  const showLoading = (seconds: number): void => {
+    body.innerHTML = `<p><em>Genererer artikel via Bonzai… (${seconds}s)</em></p><p><em>Bonzai-assistenten skriver typisk en artikel på 30-60 sekunder.</em></p>`;
   };
 
   const showError = (message: string): void => {
@@ -88,15 +89,25 @@ export function renderDraftView(
     }
 
     regenerateBtn.disabled = true;
-    showLoading();
+    const startedAt = Date.now();
+    showLoading(0);
+    const tick = window.setInterval(() => {
+      showLoading(Math.round((Date.now() - startedAt) / 1000));
+    }, 1000);
+
     try {
-      const result = await generateDraftViaApi(article.id, angle);
-      saveDraft(article.id, result.html);
-      renderHtml(result.html);
+      const onProgress = (_job: GenerateDraftJob): void => {
+        showLoading(Math.round((Date.now() - startedAt) / 1000));
+      };
+      const result = await generateDraftViaApi(article.id, angle, onProgress);
+      const html = result.html ?? '';
+      saveDraft(article.id, html);
+      renderHtml(html);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ukendt fejl';
       showError(message);
     } finally {
+      window.clearInterval(tick);
       regenerateBtn.disabled = false;
     }
   };

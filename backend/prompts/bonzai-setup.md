@@ -1,179 +1,189 @@
-# Sådan opsætter du «Videnskabsmaskinen — Generator» i Bonzai
+# Sådan opsættes Bonzai-generator i Lambda
 
-Denne guide beskriver hvordan du opretter den Bonzai-assistent, vores
-Lambda kalder, når en redaktør trykker **Generer udkast** i frontenden.
+Denne guide beskriver hvordan vores Lambda kalder Bonzai for at generere
+populærvidenskabelige udkast, og hvordan du skifter mellem de to
+opsætninger vi understøtter.
 
-Vi har bygget integrationen, så Bonzai-assistenten *også* kan kaldes i
-ren chat completions-tilstand (hvor Lambda selv sender system prompten).
-Den simpleste vej til en virkende demo er derfor:
+## Arkitektur i ét overblik
 
-1. **Få Bonzai API-credentials** (steps 1-3 herunder).
-2. **Sæt env vars** på Lambda (step 4).
-3. **Test at det virker** (step 5).
+```
+[Frontend "Generer udkast"]
+  ↓ POST /articles/{id}/generate-draft
+[Lambda]                     ── 202 + jobId ──→ frontenden
+  ↓ async self-invoke (InvocationType=Event)
+[Lambda worker]
+  ↓ POST {BONZAI_BASE_URL}/chat/completions
+[Bonzai] ── HTML ──→ S3: jobs/{jobId}.json (status=completed)
 
-Hvis Bonzai *også* har et UI til at oprette og navngive en assistent
-(med fast system prompt), så opret den i UI'en (step 6) — det giver
-redaktionen mulighed for at justere prompten uden redeploy senere. Hvis
-Bonzai ikke har det koncept, så er prompten i `generateArticlePrompt.ts`
-kilden, og vi opdaterer via Git.
+[Frontend poller GET /jobs/{jobId} hvert 2.5s]
+```
 
----
+Vi bruger et **async pattern** fordi Bonzai-assistenten typisk skriver
+i 30-60 sekunder, hvilket overskrider API Gateway HTTP API's hårde
+timeout på 30s. Lambda invoker sig selv asynkront og frontenden poller
+S3 indtil resultatet er klart.
 
-## 1. Find Bonzai API-endpoint og credentials
+## To måder at kalde Bonzai på
 
-Tjek hos jeres kontaktperson (eller i Bonzai-portalen):
+Vores `backend/src/process/bonzai.ts` understøtter begge opsætninger
+via `BONZAI_MODEL`:
 
-- `BONZAI_BASE_URL` — fx `https://api.bonzai.example/v1` eller hvad de
-  bruger. Vores Lambda forventer **OpenAI-kompatibelt endpoint**, dvs.
-  at `POST {BASE_URL}/chat/completions` virker.
-- `BONZAI_API_KEY` — secret token til at autentificere kald.
-- `BONZAI_MODEL` — model-id, fx `gpt-4o`, `gpt-4-turbo` eller en
-  Bonzai-specifik model. Den der vælges, bør kunne håndtere ca. 10.000
-  ord input og generere op til 2.000 ord output.
+| | Vej A — chat completions | Vej B — Bonzai Assistant |
+|---|---|---|
+| `BONZAI_BASE_URL` | `https://…/v1` | `https://…/assistants` |
+| `BONZAI_MODEL` | fx `claude-sonnet-4-5` | `agent_xxx` (id på din assistent) |
+| `BONZAI_API_KEY` | Project API key | Personal API key (kun den der har oprettet assistenten kan kalde den) |
+| Prompt-kilde | `generateArticlePrompt.ts` (Git-versioneret) | Bonzai-UI'en |
+| Backup af prompt i Git | Samme fil | `backend/prompts/generate-article.md` (manuel sync) |
 
-## 2. (Valgfrit, men anbefalet) Opret et projekt i Bonzai
+`bonzai.ts` checker om `BONZAI_MODEL` starter med `agent_`. Hvis ja,
+sender vi kun user-message; ellers sender vi system-prompt + user-message.
 
-Hvis Bonzai har «projects» eller «workspaces», opret ét til denne demo
-så credentials er isoleret fra andre ting:
+## Vej A: chat completions
 
-- **Navn:** `Videnskabsmaskinen — Demo`
-- **Beskrivelse:** Demo-assistent der omsætter videnskabelige RSS-
-  artikler om mental sundhed til populærvidenskabelig journalistik på
-  dansk.
+Den simpleste opsætning — alt findes i Git og kan deployes uden afhængighed
+af Bonzai's UI.
 
-## 3. Validér at API'et virker
+```
+BONZAI_BASE_URL=https://api-v2.bonzai.iodigital.com/v1
+BONZAI_API_KEY=<project key>
+BONZAI_MODEL=claude-sonnet-4-5
+```
 
-Test først udenfor vores app, så vi ved at credentials er korrekte. Fra
-din terminal (erstat værdier):
+For at ændre prompten: rediger `backend/src/process/generateArticlePrompt.ts`,
+deploy. Den kanoniske version er også i `backend/prompts/generate-article.md`
+(bør holdes i sync som backup).
+
+## Vej B: Bonzai Assistant (anbefalet i produktion)
+
+Brug en assistent oprettet i Bonzai-UI'en. Prompten kan redigeres uden
+deploy. Krav: API-keyen skal tilhøre den bruger der har oprettet
+assistenten (det er en begrænsning i Bonzai's permission-model i dag).
+
+```
+BONZAI_BASE_URL=https://api-v2.bonzai.iodigital.com/assistants
+BONZAI_API_KEY=<personal key fra https://app.bonzai.iodigital.com/api-keys>
+BONZAI_MODEL=agent_L-IbyQc5TYwIaK2_orOs2
+```
+
+For at finde assistant-id:
 
 ```bash
-curl -X POST "$BONZAI_BASE_URL/chat/completions" \
+curl -s https://api-v2.bonzai.iodigital.com/assistants/assistants \
+  -H "Authorization: Bearer $BONZAI_API_KEY" | jq '.data[] | {id, name}'
+```
+
+For at oprette/ændre assistenten: gå til
+https://app.bonzai.iodigital.com → Assistants → vælg eller opret
+"Generer videnskabsartikel". Indsæt prompten fra
+`backend/prompts/generate-article.md` (System prompt-blokken).
+
+## Test API-keyen direkte (uden Lambda)
+
+```bash
+# Vej A
+curl -s -X POST https://api-v2.bonzai.iodigital.com/v1/chat/completions \
   -H "Authorization: Bearer $BONZAI_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o",
-    "messages": [
-      { "role": "user", "content": "Sig hej på dansk." }
-    ]
-  }'
+  -d '{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"Sig hej"}]}'
+
+# Vej B
+curl -s -X POST https://api-v2.bonzai.iodigital.com/assistants/chat/completions \
+  -H "Authorization: Bearer $BONZAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"agent_L-IbyQc5TYwIaK2_orOs2","messages":[{"role":"user","content":"Sig hej"}]}'
 ```
 
-Hvis du får et JSON-svar med `choices[0].message.content` der indeholder
-en hilsen, er API'et klar. Hvis det fejler:
-
-- 401 → API key er forkert eller mangler `Bearer`-prefix.
-- 404 → Base URL er forkert (mangler `/v1`?). Spørg Bonzai-supporten.
-- 429 → Rate limit, vent et øjeblik.
-- Andet → Send fejlen videre, så undersøger vi.
-
-## 4. Sæt env vars på Lambda
-
-I AWS-konsollen → Lambda → `videnskabsmaskinen-api` → **Configuration →
-Environment variables**:
-
-| Variable           | Værdi                                |
-|--------------------|---------------------------------------|
-| `BONZAI_BASE_URL`  | værdien fra step 1                   |
-| `BONZAI_API_KEY`   | værdien fra step 1                   |
-| `BONZAI_MODEL`     | værdien fra step 1 (fx `gpt-4o`)     |
-
-> **Tip:** Du kan også sætte dem via SAM ved næste deploy — men UI'en er
-> hurtigere til at validere uden ny deploy.
-
-Når du har gemt env vars, vent ~10 sekunder og test:
+## Sæt env vars og deploy
 
 ```bash
-curl -X POST "https://30bw0tkv7k.execute-api.eu-west-1.amazonaws.com/prod/articles/<en-rigtig-artikel-id>/generate-draft" \
+PERSONAL_KEY=$(cat ~/.bonzai-test-key)  # eller hvor du har den
+aws lambda update-function-configuration \
+  --function-name videnskabsmaskinen-api \
+  --region eu-west-1 \
+  --environment "Variables={BUCKET=videnskabsmaskinen-articles,\
+BONZAI_BASE_URL=https://api-v2.bonzai.iodigital.com/assistants,\
+BONZAI_API_KEY=$PERSONAL_KEY,\
+BONZAI_MODEL=agent_L-IbyQc5TYwIaK2_orOs2,\
+WORDPRESS_URL=https://placeholder,\
+WORDPRESS_USER=placeholder,\
+WORDPRESS_APP_PASSWORD=placeholder}"
+```
+
+Deploy koden:
+
+```bash
+cd backend
+npm run package
+aws lambda update-function-code --function-name videnskabsmaskinen-api \
+  --region eu-west-1 --zip-file fileb://function.zip
+```
+
+## End-to-end test mod live Lambda
+
+```bash
+API=https://30bw0tkv7k.execute-api.eu-west-1.amazonaws.com/prod
+ID=3c0f10d723cb09f1d3e52ae4d83ea79b2eae86c3
+
+# 1) Start job — returnerer jobId straks
+JOB=$(curl -s -X POST "$API/articles/$ID/generate-draft" \
   -H "Content-Type: application/json" \
-  -d '{ "angle": "Skriv kort og engagerende" }'
+  -d '{"angle":"Skriv kort og letlæseligt for unge læsere"}' \
+  | jq -r .jobId)
+echo "JobId: $JOB"
+
+# 2) Poll for resultat
+while true; do
+  STATUS=$(curl -s "$API/jobs/$JOB" | jq -r .status)
+  echo "$STATUS"
+  [[ "$STATUS" == "completed" || "$STATUS" == "failed" ]] && break
+  sleep 3
+done
+curl -s "$API/jobs/$JOB" | jq .
 ```
 
-(Find et `articleId` ved at åbne demoen og kigge på `data-id` på et
-inbox-card eller via S3.)
+## Aktivér i frontenden
 
-Forventet svar:
-
-```json
-{
-  "articleId": "...",
-  "title": "...",
-  "sourceUrl": "...",
-  "angle": "Skriv kort og engagerende",
-  "html": "<h1>...</h1><p class=\"lede\"><em>...</em></p>...",
-  "bodyFetched": true,
-  "generatedAt": "2026-04-27T..."
-}
-```
-
-`bodyFetched: true` betyder Bonzai fik brødteksten med. `false` betyder
-sitet (fx ScienceDirect) blokerede crawling — modellen genererer
-stadig, men kun ud fra titel + teaser.
-
-## 5. Aktivér backend-generation i frontenden
-
-Sæt env var på Vite-deployment (fx i Amplify):
+Frontenden bruger backend hvis miljøvariablen er sat:
 
 ```
+# I Amplify Console → Environment variables
 VITE_USE_BACKEND_GENERATION=true
-```
-
-Lokalt i `frontend/.env.local`:
-
-```
 VITE_API_URL=https://30bw0tkv7k.execute-api.eu-west-1.amazonaws.com/prod
+
+# Lokalt i frontend/.env.local
 VITE_USE_BACKEND_GENERATION=true
+VITE_API_URL=https://30bw0tkv7k.execute-api.eu-west-1.amazonaws.com/prod
 ```
 
-Genstart Vite (eller Amplify deploy). Når en redaktør nu trykker
-**Generer udkast**, kalder frontenden Lambda → Bonzai → ægte AI-output
-i stedet for mock-skabelonen. Statusbadgen i Udkast-viewet skifter fra
+Når flagget er sat, kalder draft-viewet backend'en og viser en spinner
+med en tæller mens jobbet kører. Statusbadgen skifter fra
 *Demo-udkast* til *Bonzai-udkast*.
 
-Hvis du **ikke** sætter flagget, fortsætter demoen med at bruge mock —
-nyttigt fx i præsentationssituationer hvor du ikke vil bruge tokens.
+## IAM-permission til self-invoke
 
-## 6. (Valgfrit) Opret en navngivet assistent i Bonzai-UI'en
+Lambda-execution-rollen skal have `lambda:InvokeFunction` på sig selv,
+så den kan starte worker-jobbet asynkront. Tilføjet som inline policy
+(`AllowSelfAsyncInvoke`) — er dækket i SAM-templaten ved næste rullende
+deploy. Hvis du laver en frisk SAM-deploy og det stopper med at virke,
+så genaktivér policyen:
 
-Hvis Bonzai har et UI til at oprette assistenter med fast system prompt
-(à la OpenAI Assistants eller «GPTs»):
-
-1. Opret en assistent med navnet `Videnskabsmaskinen — Generator`.
-2. Som **system prompt** indsætter du **hele teksten i blokken under
-   «System prompt» i `backend/prompts/generate-article.md`**. Kopier
-   *præcis* — ingen redigering af struktur — med mindre I bevidst
-   tilpasser tonen.
-3. Vælg samme model som i `BONZAI_MODEL`.
-4. Tag assistant_id'en og sæt den som ekstra env var:
-   `BONZAI_ASSISTANT_ID=<id>`. *Vores Lambda bruger den ikke i dag*,
-   men når Bonzai-koncernen får støttet et `assistant_id`-felt i
-   chat completions-kaldet, kan vi udvide `bonzai.ts` til at sende
-   det. Indtil da fungerer redigering af prompten i Bonzai-UI'en kun
-   som dokumentation, ikke som kilde — Lambda bruger
-   `generateArticlePrompt.ts` som sandhedskilde.
-
-> **Beslutning vi skal tage senere:** Hvis Bonzai *kun* understøtter
-> chat completions (ikke et separat Assistants API), så er der ikke
-> nogen god grund til at oprette en assistent i UI'en — prompten i
-> repoet er sandhedskilden. Hvis Bonzai derimod har Assistants API,
-> så omskriver vi `bonzai.ts` til at kalde
-> `POST /assistants/{id}/messages` (eller hvad endpoint hedder) og
-> sender kun user message + variabler.
-
-## Hvis du vil ændre prompten
-
-1. **Lambdas prompt:** Rediger `backend/src/process/generateArticlePrompt.ts`
-   *og* `backend/prompts/generate-article.md` (de skal holdes i sync).
-2. Deploy: `cd infrastructure && sam build && sam deploy`.
-3. Hvis du har oprettet assistenten i Bonzai-UI'en (step 6), så kopier
-   den nye system prompt fra `.md`-filen ind i UI'en også, så de er
-   konsistente.
+```bash
+ROLE=videnskabsmaskinen-ApiFunctionRole-PRdUGLVosECx
+ARN=$(aws lambda get-function-configuration \
+  --function-name videnskabsmaskinen-api --region eu-west-1 \
+  --query FunctionArn --output text)
+aws iam put-role-policy --role-name $ROLE --policy-name AllowSelfAsyncInvoke \
+  --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"lambda:InvokeFunction\",\"Resource\":\"$ARN\"}]}"
+```
 
 ## Fejlfinding
 
-| Symptom                                    | Sandsynlig årsag                              |
-|--------------------------------------------|-----------------------------------------------|
-| Lambda returnerer 500 «401 Unauthorized»    | Forkert `BONZAI_API_KEY` eller manglende prefix |
-| Lambda returnerer 500 «404 Not Found»       | Forkert `BONZAI_BASE_URL` — mangler `/v1`?    |
-| `bodyFetched: false` på alle artikler       | Crawler blokeres af alle sites — tjek at `User-Agent` ikke er rate limited; brug RSS-teaser som primær kilde |
-| `html` indeholder \`\`\`html\`\`\` fences   | Modellen ignorerer instruktion — `stripFences` i `bonzai.ts` skal håndtere det |
-| Generation tager > 30 sekunder              | Lambda timeout (default 60s i SAM-template). Hæv hvis nødvendigt eller bed Bonzai om kortere output |
+| Symptom | Sandsynlig årsag |
+|---|---|
+| 503 fra `/articles/{id}/generate-draft` | API Gateway 30s-timeout. Tjek at koden er den nye async-version (returnerer 202, ikke 200) |
+| 202 men job hænger som `pending` for evigt | Self-invoke fejlede. Tjek CloudWatch logs på Lambda for IAM-fejl. Bekræft at `AllowSelfAsyncInvoke`-policyen eksisterer på rollen |
+| Job-resultat har en meta-paragraph før første `<h1>` | Bonzai-assistenten har afvist en del af vinklen. Indholdet er stadig brugbart — meta-teksten kan strippes manuelt eller assistant-prompten kan tilpasses |
+| `error: "Agent not found"` | Forkert `BONZAI_MODEL` (assistant-id er korrekt format men eksisterer ikke for keyen) — tjek med `GET /assistants/assistants` |
+| `error: "Access to agents is disabled for your role"` | API-keyen er en project key, ikke personal. Bonzai's Assistants API kræver personal key i dag |
+| Frontend timeout efter 180s | Bonzai er overbelastet eller assistant-prompten genererer ekstremt langt output. Tjek `GET /jobs/{id}` direkte for at se om jobbet faktisk fortsætter — hvis det færdiggøres senere, er HTML'en stadig i S3 |

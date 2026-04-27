@@ -9,15 +9,16 @@
 - ✅ Crawler: **RSS** (`crawlRssSource.ts`, `type: "rss"` i kilder) + **HTML** (`crawlOneSource`) — `runCrawl()` vælger ud fra `source.type`
 - ✅ **Kildelisten** i repo: flere RSS-feeds fra psykiatri- og psykologi-tidsskrifter i `backend/sources.json` (grupperet med `customerId` i filen)
 - ✅ GitHub: Auto-deploy ved push til `main`
+- ✅ **Bonzai-generator (live)**: `POST /articles/{id}/generate-draft` returnerer 202 + jobId med det samme, Lambda invoker sig selv asynkront og skriver resultatet til `S3:jobs/{jobId}.json`. Frontend poller `GET /jobs/{jobId}` indtil status=completed. Lambda kalder pt. Bonzai-assistenten "Generer videnskabsartikel" (claude-sonnet-4-6) via Vej B.
+- ✅ **Async pattern**: omgår API Gateway HTTP API's 30s-timeout. IAM-policy `AllowSelfAsyncInvoke` på Lambda execution role.
 
 ### Mangler
-- 🟡 **Redaktør-flow (demo)**: frontend har **rangering**, **udvælgelse til Til behandling** (localStorage) og **dedikeret Udkast-view** med mock-genereret artikel. Hele flowet kan demonstreres uden backend-ændringer. Backend `POST /articles/rank`, `POST /articles/{id}/generate-draft` og `POST /articles/{id}/process` er kodet, men *Send til WordPress* i UI'et er disabled indtil Lambda-credentials er på plads.
-- 🟡 **Generator-flow (klar i kode, afventer credentials)**: `POST /articles/{id}/generate-draft` kalder Bonzai med Kristoffers prompt A og `fetchArticleBody`, returnerer ren HTML. Frontend kan slå over via `VITE_USE_BACKEND_GENERATION=true`. Bonzai-prompt er versioneret i `backend/prompts/generate-article.md` og inline i `process/generateArticlePrompt.ts`. Setup-guide til Bonzai-assistenten ligger i `backend/prompts/bonzai-setup.md`.
+- 🟡 **Redaktør-flow (demo)**: frontend har **rangering**, **udvælgelse til Til behandling** (localStorage) og **dedikeret Udkast-view** med ægte Bonzai-genereret artikel via async polling. Hele flowet er nu live. *Send til WordPress* i UI'et er stadig disabled indtil WordPress-credentials er på plads.
 - ⬜ **S3 `articles/sources.json`**: hold produktions-kildelisten i sync med den version, der ligger i Git — Lambda læser fra S3 ved crawl
 - ⬜ Løbende test af enkelte RSS-URL’er (udgivere ændrer feeds)
-- ⬜ Bonzai API credentials sat i Lambda env vars
 - ⬜ WordPress credentials sat i Lambda env vars
 - ⬜ Test af fuldt process-article flow (Bonzai → WordPress)
+- ⬜ Migrer `lambda:InvokeFunction` self-policy ind i SAM-templaten så den ikke skal genaktiveres ved fremtidige `sam deploy`
 
 ---
 
@@ -43,10 +44,13 @@ Frontend (Inbox → Til behandling → Udkast) → POST /articles/{id}/process
     → fetchArticleBody (brødtekst fra original-URL)
     → Bonzai (Kristoffers prompt A) → WordPress REST API (draft)
 
-Generator-flow (kode klar, afventer credentials):
+Generator-flow (live, async pattern):
 Frontend (Udkast-view) → POST /articles/{id}/generate-draft
-    → fetchArticleBody → Bonzai → ren HTML retur
-    → frontend renderer i Udkast-view (uden at sende til WP)
+    ← 202 + jobId (med det samme)
+Lambda → invoker sig selv asynkront (InvocationType=Event)
+Worker  → fetchArticleBody → Bonzai-assistent (Vej B) → S3: jobs/{jobId}.json
+Frontend poller GET /jobs/{jobId} hvert 2.5s
+    → renderer HTML i Udkast-view når status=completed
     Switches via VITE_USE_BACKEND_GENERATION=true; ellers mock.
 
 Rangering (delvist i produktion):

@@ -27,7 +27,10 @@ Parameters:
 Globals:
   Function:
     Runtime: nodejs22.x
-    Timeout: 60
+    # 900s = 15 min: nødvendigt for async self-invoke worker, der venter
+    # på Bonzai-assistenten (typisk 30-90s, men variabelt). HTTP-kald er
+    # stadig begrænset til API Gateway HTTP API's hårde 30s.
+    Timeout: 900
     MemorySize: 256
     Environment:
       Variables:
@@ -73,6 +76,13 @@ Resources:
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref ArticlesBucket
+        # Self-invoke for async generation pattern: Lambda kalder sig selv
+        # via InvokeCommand med InvocationType=Event for at undgå API
+        # Gateway's 30s-timeout. Se backend/prompts/bonzai-setup.md.
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:videnskabsmaskinen-api'
 
   # ── API Gateway ──────────────────────────────────────────────────────────────
   HttpApi:
