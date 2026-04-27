@@ -39,6 +39,22 @@ export async function processArticle(
   });
 }
 
+export interface GenerateDraftResult {
+  articleId: string;
+  title: string;
+  sourceUrl: string;
+  angle: string;
+  html: string;
+  generatedAt: string;
+}
+
+export async function generateDraft(id: string, angle: string): Promise<GenerateDraftResult> {
+  return request<GenerateDraftResult>(`/articles/${id}/generate-draft`, {
+    method: 'POST',
+    body: JSON.stringify({ angle }),
+  });
+}
+
 export async function triggerCrawl(): Promise<void> {
   await request('/crawl', { method: 'POST' });
 }

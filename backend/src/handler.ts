@@ -6,6 +6,7 @@ import { crawlRssSource } from './crawler/crawlRssSource';
 import { generateArticle } from './process/bonzai';
 import { createWordPressDraft } from './process/wordpress';
 import { rankArticle } from './process/rankArticle';
+import { fetchArticleBody } from './process/fetchArticleBody';
 import { Article, SourcesStore, CrawlResult } from './types';
 
 const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
@@ -18,10 +19,6 @@ function strippedPath(event: APIGatewayProxyEventV2): string {
   const stage = event.requestContext.stage ?? '';
   const rawPath = event.rawPath;
   return stage && rawPath.startsWith(`/${stage}`) ? rawPath.slice(stage.length + 1) : rawPath;
-}
-
-function articleIdFromPath(event: APIGatewayProxyEventV2): string {
-  return strippedPath(event).split('/')[2] ?? '';
 }
 
 export async function handler(event: any): Promise<any> {
@@ -40,9 +37,16 @@ export async function handler(event: any): Promise<any> {
     if (method === 'OPTIONS') return json(200, {});
 
     if (method === 'GET' && path === '/articles') return handleGetArticles(e);
-    if (method === 'PATCH' && path.match(/^\/articles\/[^/]+$/)) return handlePatchArticle(e);
-    if (method === 'POST' && path.match(/^\/articles\/[^/]+\/process$/)) return handleProcessArticle(e);
-    if (method === 'POST' && path.match(/^\/articles\/[^/]+\/rank$/)) return handleRankArticle(e);
+
+    const articleIdMatch = path.match(/^\/articles\/([^/]+)(\/.*)?$/);
+    const id = articleIdMatch?.[1] ?? '';
+    const subPath = articleIdMatch?.[2] ?? '';
+
+    if (method === 'PATCH' && id && !subPath) return handlePatchArticle(e, id);
+    if (method === 'POST' && id && subPath === '/process') return handleProcessArticle(e, id);
+    if (method === 'POST' && id && subPath === '/generate-draft') return handleGenerateDraft(e, id);
+    if (method === 'POST' && id && subPath === '/rank') return handleRankArticle(id);
+
     if (method === 'POST' && path === '/articles/rank') return handleRankInbox(e);
     if (method === 'POST' && path === '/crawl') return handlePostCrawl();
 
@@ -60,8 +64,7 @@ async function handleGetArticles(event: APIGatewayProxyEventV2): Promise<APIGate
   return json(200, { articles, count: articles.length });
 }
 
-async function handlePatchArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = articleIdFromPath(event);
+async function handlePatchArticle(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
   const body = event.body ? JSON.parse(event.body) : {};
   const { status, angle } = body as { status?: string; angle?: string };
 
@@ -82,8 +85,7 @@ async function handlePatchArticle(event: APIGatewayProxyEventV2): Promise<APIGat
   return json(200, article);
 }
 
-async function handleProcessArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = articleIdFromPath(event);
+async function handleProcessArticle(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
   const body = event.body ? JSON.parse(event.body) : {};
   const angle: string = body.angle || '';
 
@@ -96,7 +98,14 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2): Promise<APIG
   article.angle = angle;
   await moveArticle(id, from, article);
 
-  const htmlContent = await generateArticle(article.title, article.teaser, article.url, angle);
+  const articleBody = await safeFetchBody(article.url);
+  const htmlContent = await generateArticle({
+    title: article.title,
+    teaser: article.teaser,
+    url: article.url,
+    angle,
+    body: articleBody,
+  });
   const wpId = await createWordPressDraft(article.title, htmlContent);
 
   article.status = 'published';
@@ -107,8 +116,55 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2): Promise<APIG
   return json(200, { article, wordpressPostId: wpId });
 }
 
-async function handleRankArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = articleIdFromPath(event);
+/**
+ * Genererer kun et udkast og returnerer HTML uden at gemme/flytte
+ * artiklen eller sende til WordPress. Bruges af frontend Udkast-viewet,
+ * så vi kan teste Bonzai-generation uden at WordPress-credentials skal
+ * være på plads.
+ */
+async function handleGenerateDraft(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
+  const body = event.body ? JSON.parse(event.body) : {};
+  const angle: string = typeof body.angle === 'string' ? body.angle : '';
+
+  let article = await loadArticle(id, 'inbox');
+  if (!article) article = await loadArticle(id, 'reviewed');
+  if (!article) return json(404, { error: 'Artikel ikke fundet' });
+
+  const articleBody = await safeFetchBody(article.url);
+  const html = await generateArticle({
+    title: article.title,
+    teaser: article.teaser,
+    url: article.url,
+    angle,
+    body: articleBody,
+  });
+
+  return json(200, {
+    articleId: article.id,
+    title: article.title,
+    sourceUrl: article.url,
+    angle,
+    html,
+    bodyFetched: articleBody.length > 0,
+    generatedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Henter brødtekst gracefully — hvis sitet blokerer (fx 403 fra
+ * ScienceDirect) returneres tom string, og generator/ranker falder
+ * tilbage til titel+teaser. Samme mønster som i rankArticle.
+ */
+async function safeFetchBody(url: string): Promise<string> {
+  try {
+    return await fetchArticleBody(url);
+  } catch (error) {
+    console.warn(`Kunne ikke hente brødtekst fra ${url}:`, error);
+    return '';
+  }
+}
+
+async function handleRankArticle(id: string): Promise<APIGatewayProxyResultV2> {
   const article = await loadArticle(id, 'inbox');
   if (!article) return json(404, { error: 'Artikel ikke fundet i inbox' });
 
