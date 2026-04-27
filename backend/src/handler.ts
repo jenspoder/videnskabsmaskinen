@@ -33,10 +33,16 @@ export async function handler(event: any): Promise<any> {
     if (method === 'OPTIONS') return json(200, {});
 
     if (method === 'GET' && path === '/articles') return handleGetArticles(e);
-    if (method === 'PATCH' && path.match(/^\/articles\/[^/]+$/)) return handlePatchArticle(e);
-    if (method === 'POST' && path.match(/^\/articles\/[^/]+\/process$/)) return handleProcessArticle(e);
-    if (method === 'POST' && path.match(/^\/articles\/[^/]+\/generate-draft$/)) return handleGenerateDraft(e);
-    if (method === 'POST' && path.match(/^\/articles\/[^/]+\/rank$/)) return handleRankArticle(e);
+
+    const articleIdMatch = path.match(/^\/articles\/([^/]+)(\/.*)?$/);
+    const id = articleIdMatch?.[1] ?? '';
+    const subPath = articleIdMatch?.[2] ?? '';
+
+    if (method === 'PATCH' && id && !subPath) return handlePatchArticle(e, id);
+    if (method === 'POST' && id && subPath === '/process') return handleProcessArticle(e, id);
+    if (method === 'POST' && id && subPath === '/generate-draft') return handleGenerateDraft(e, id);
+    if (method === 'POST' && id && subPath === '/rank') return handleRankArticle(id);
+
     if (method === 'POST' && path === '/articles/rank') return handleRankInbox(e);
     if (method === 'POST' && path === '/crawl') return handlePostCrawl();
 
@@ -54,8 +60,7 @@ async function handleGetArticles(event: APIGatewayProxyEventV2): Promise<APIGate
   return json(200, { articles, count: articles.length });
 }
 
-async function handlePatchArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = event.rawPath.split('/')[2];
+async function handlePatchArticle(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
   const body = event.body ? JSON.parse(event.body) : {};
   const { status, angle } = body as { status?: string; angle?: string };
 
@@ -76,8 +81,7 @@ async function handlePatchArticle(event: APIGatewayProxyEventV2): Promise<APIGat
   return json(200, article);
 }
 
-async function handleProcessArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = event.rawPath.split('/')[2];
+async function handleProcessArticle(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
   const body = event.body ? JSON.parse(event.body) : {};
   const angle: string = body.angle || '';
 
@@ -114,8 +118,7 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2): Promise<APIG
  * så vi kan teste Bonzai-generation uden at WordPress-credentials skal
  * være på plads.
  */
-async function handleGenerateDraft(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = event.rawPath.split('/')[2];
+async function handleGenerateDraft(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
   const body = event.body ? JSON.parse(event.body) : {};
   const angle: string = typeof body.angle === 'string' ? body.angle : '';
 
@@ -157,8 +160,7 @@ async function safeFetchBody(url: string): Promise<string> {
   }
 }
 
-async function handleRankArticle(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const id = event.rawPath.split('/')[2];
+async function handleRankArticle(id: string): Promise<APIGatewayProxyResultV2> {
   const article = await loadArticle(id, 'inbox');
   if (!article) return json(404, { error: 'Artikel ikke fundet i inbox' });
 
