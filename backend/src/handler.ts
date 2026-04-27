@@ -297,7 +297,9 @@ async function handleRankArticle(id: string): Promise<APIGatewayProxyResultV2> {
 async function handleRankInbox(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const force = event.queryStringParameters?.force === 'true';
   const articles = await listArticlesInFolder('inbox');
-  const targets = force ? articles : articles.filter((a) => a.relevanceScore === null);
+  const targets = force
+    ? articles
+    : articles.filter((a) => a.relevanceScore === null || !a.relevanceBreakdown);
 
   let ranked = 0;
   const errors: Array<{ id: string; message: string }> = [];
