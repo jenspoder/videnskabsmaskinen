@@ -286,14 +286,50 @@
       padding: 0.18rem 0.55rem;
     }
 
-    .card-rationale {
-      font-size: 0.78rem;
+    .card-summary,
+    .card-angle {
+      font-size: 0.82rem;
       line-height: 1.5;
-      opacity: 0.55;
-      font-style: italic;
-      margin: -0.25rem 0 0.85rem;
+      opacity: 0.7;
+      margin: -0.25rem 0 0.5rem;
       padding-left: 0.6rem;
       border-left: 2px solid rgba(255,255,255,0.1);
+    }
+
+    .card-angle {
+      opacity: 0.85;
+    }
+
+    .card-summary strong,
+    .card-angle strong {
+      opacity: 0.6;
+      font-weight: 500;
+    }
+
+    .card-breakdown {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin: 0.25rem 0 0.85rem;
+    }
+
+    .breakdown-item {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.3rem;
+      font-size: 0.7rem;
+      padding: 0.18rem 0.5rem;
+      border-radius: 0.3rem;
+      background: rgba(255,255,255,0.04);
+    }
+
+    .breakdown-label {
+      opacity: 0.55;
+    }
+
+    .breakdown-value {
+      font-weight: 600;
+      opacity: 0.9;
     }
 
     /* ── TIL BEHANDLING ── */

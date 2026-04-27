@@ -1,5 +1,14 @@
 export type RelevanceBucket = 'high' | 'medium' | 'low';
 
+export interface RelevanceBreakdown {
+  kontraintuitiv_faktor: number;
+  universalitet: number;
+  forklarbarhed: number;
+  nyhedsgrad: number;
+  konkret_konsekvens: number;
+  kildernes_trovaerdighed: number;
+}
+
 export interface Article {
   id: string;
   customerId: string;
@@ -15,6 +24,8 @@ export interface Article {
   wordpressPostId: number | null;
   relevanceScore: number | null;
   relevanceBucket: RelevanceBucket | null;
-  relevanceRationale: string | null;
+  relevanceBreakdown: RelevanceBreakdown | null;
+  relevanceSummary: string | null;
+  relevanceAngle: string | null;
   rankedAt: string | null;
 }

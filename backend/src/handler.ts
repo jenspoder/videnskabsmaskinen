@@ -197,11 +197,14 @@ async function handleRankInbox(event: APIGatewayProxyEventV2): Promise<APIGatewa
 
 async function rankAndPersist(article: Article): Promise<Article> {
   const result = await rankArticle(article);
+  const { relevanceRationale: _ignored, ...rest } = article as any;
   const updated: Article = {
-    ...article,
+    ...rest,
     relevanceScore: result.score,
     relevanceBucket: result.bucket,
-    relevanceRationale: result.rationale,
+    relevanceBreakdown: result.breakdown,
+    relevanceSummary: result.summary,
+    relevanceAngle: result.angle,
     rankedAt: new Date().toISOString(),
   };
   await saveArticle(updated);

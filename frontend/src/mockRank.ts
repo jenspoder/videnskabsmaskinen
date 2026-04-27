@@ -3,7 +3,7 @@ import type { Article, RelevanceBucket } from './types';
 export interface MockRankResult {
   score: number;
   bucket: RelevanceBucket;
-  rationale: string;
+  angle: string;
 }
 
 const POSITIVE_KEYWORDS: Array<{ words: string[]; weight: number; tag: string }> = [
@@ -61,12 +61,12 @@ export function mockRankArticle(article: Article): MockRankResult {
   score = Math.max(0, Math.min(100, Math.round(score)));
 
   const bucket: RelevanceBucket = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
-  const rationale = buildRationale(matched, negatives, article);
+  const angle = buildAngle(matched, negatives, article);
 
-  return { score, bucket, rationale };
+  return { score, bucket, angle };
 }
 
-function buildRationale(matched: string[], negatives: string[], article: Article): string {
+function buildAngle(matched: string[], negatives: string[], article: Article): string {
   const parts: string[] = [];
 
   if (matched.length > 0) {

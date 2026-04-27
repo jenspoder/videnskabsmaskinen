@@ -70,7 +70,9 @@ function extractItemData(
       wordpressPostId: null,
       relevanceScore: null,
       relevanceBucket: null,
-      relevanceRationale: null,
+      relevanceBreakdown: null,
+      relevanceSummary: null,
+      relevanceAngle: null,
       rankedAt: null,
     };
   } catch {

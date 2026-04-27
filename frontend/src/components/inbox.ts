@@ -31,9 +31,13 @@ export function buildInboxCard(
   })();
 
   const rankHtml = buildRankBadge(article);
-  const rationaleHtml = article.relevanceRationale
-    ? `<div class="card-rationale">${escapeHtml(article.relevanceRationale)}</div>`
+  const summaryHtml = article.relevanceSummary
+    ? `<div class="card-summary"><strong>Hvad handler det om:</strong> ${escapeHtml(article.relevanceSummary)}</div>`
     : '';
+  const angleHtml = article.relevanceAngle
+    ? `<div class="card-angle"><strong>Vinkel:</strong> ${escapeHtml(article.relevanceAngle)}</div>`
+    : '';
+  const breakdownHtml = buildBreakdown(article);
 
   card.innerHTML = `
     <div class="card-inner">
@@ -42,7 +46,9 @@ export function buildInboxCard(
         ${rankHtml}
         <div class="card-title">${article.title}</div>
         <div class="card-description">${escapeHtml(cleanTeaser(article.teaser))}</div>
-        ${rationaleHtml}
+        ${summaryHtml}
+        ${angleHtml}
+        ${breakdownHtml}
         <a href="${article.url}" target="_blank" rel="noopener" class="card-source-link">
           Læs original på ${hostname} ${ARROW_SVG}
         </a>
@@ -133,6 +139,26 @@ function buildRankBadge(article: Article): string {
       <span class="rank-score">${article.relevanceScore}</span>
       <span class="rank-label">${label}</span>
     </div>`;
+}
+
+const PARAM_LABELS: Record<string, string> = {
+  kontraintuitiv_faktor: 'Kontraintuitiv',
+  universalitet: 'Universalitet',
+  forklarbarhed: 'Forklarbarhed',
+  nyhedsgrad: 'Nyhedsgrad',
+  konkret_konsekvens: 'Konsekvens',
+  kildernes_trovaerdighed: 'Troværdighed',
+};
+
+function buildBreakdown(article: Article): string {
+  if (!article.relevanceBreakdown) return '';
+  const items = Object.entries(article.relevanceBreakdown)
+    .map(([key, value]) => {
+      const label = PARAM_LABELS[key] ?? key;
+      return `<span class="breakdown-item"><span class="breakdown-label">${label}</span><span class="breakdown-value">${value}/5</span></span>`;
+    })
+    .join('');
+  return `<div class="card-breakdown">${items}</div>`;
 }
 
 function escapeHtml(text: string): string {

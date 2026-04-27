@@ -188,7 +188,7 @@ async function handleRank(btn: HTMLButtonElement): Promise<void> {
       const result = mockRankArticle(article);
       article.relevanceScore = result.score;
       article.relevanceBucket = result.bucket;
-      article.relevanceRationale = result.rationale;
+      article.relevanceAngle = result.angle;
       article.rankedAt = new Date().toISOString();
     }
     renderInboxFromState();
@@ -204,7 +204,7 @@ function applyMockRankToUnranked(articles: Article[]): void {
       const result = mockRankArticle(article);
       article.relevanceScore = result.score;
       article.relevanceBucket = result.bucket;
-      article.relevanceRationale = result.rationale;
+      article.relevanceAngle = result.angle;
       article.rankedAt = new Date().toISOString();
     }
   }
