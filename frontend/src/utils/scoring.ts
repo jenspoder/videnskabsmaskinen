@@ -8,6 +8,10 @@ import type { Article, RelevanceBucket } from '../types';
  */
 export type AccessBucket = 'full' | 'abstract';
 
+export function isUploadedDocument(article: Article): boolean {
+  return article.sourceType === 'uploaded_document' || article.openAccess?.contentSourceType === 'uploaded_document';
+}
+
 export function isGeneratable(article: Article): boolean {
   const oa = article.openAccess;
   if (oa?.canGenerate === true) return true;
@@ -18,7 +22,7 @@ export function isGeneratable(article: Article): boolean {
 
 export function accessBucket(article: Article): AccessBucket {
   const source = article.openAccess?.contentSourceType;
-  return source === 'original_fulltext' || source === 'oa_fulltext' || article.openAccess?.hasUsableFulltext === true
+  return source === 'uploaded_document' || source === 'original_fulltext' || source === 'oa_fulltext' || article.openAccess?.hasUsableFulltext === true
     ? 'full'
     : 'abstract';
 }

@@ -8,6 +8,7 @@ const client = new OpenAI({
 });
 
 const MODEL = process.env.BONZAI_MODEL || 'gpt-4o';
+const MAX_RANK_TEXT_CHARS = 12000;
 
 export interface RankResult {
   score: number;
@@ -20,7 +21,9 @@ export interface RankResult {
 }
 
 export async function rankArticle(article: Article): Promise<RankResult> {
-  const body = article.openAccess?.contentSourceType === 'original_abstract' || article.openAccess?.contentSourceType === 'openalex_abstract' || article.openAccess?.contentSourceType === 'crossref_abstract'
+  const body = article.openAccess?.contentSourceType === 'uploaded_document'
+    ? article.openAccess?.contentText?.trim() || ''
+    : article.openAccess?.contentSourceType === 'original_abstract' || article.openAccess?.contentSourceType === 'openalex_abstract' || article.openAccess?.contentSourceType === 'crossref_abstract'
     ? ''
     : await safeFetchBody(pickBestSourceUrl(article));
   const prompt = buildPrompt(article, body);
@@ -94,7 +97,8 @@ Returner KUN dette JSON-format uden forklaring og uden markdown:
 `.trim();
 
 function buildPrompt(article: Article, body: string): string {
-  const abstract = body || bestGenerationTeaser(article) || '(intet abstract tilgængeligt)';
+  const sourceText = body || bestGenerationTeaser(article) || '(intet abstract tilgængeligt)';
+  const abstract = limitRankText(sourceText);
   return `Artikel:
 - Titel: ${article.title}
 - Abstract: ${abstract}
@@ -103,10 +107,15 @@ function buildPrompt(article: Article, body: string): string {
 Score artiklen og returner kun JSON.`;
 }
 
+function limitRankText(text: string): string {
+  if (text.length <= MAX_RANK_TEXT_CHARS) return text;
+  return `${text.slice(0, MAX_RANK_TEXT_CHARS).trim()}\n\n[Uddraget er afkortet til ranking. Hele dokumentet kan stadig bruges som genereringsgrundlag.]`;
+}
+
 function bestGenerationTeaser(article: Article): string {
   const sourceType = article.openAccess?.contentSourceType;
   if (
-    (sourceType === 'original_abstract' || sourceType === 'openalex_abstract' || sourceType === 'crossref_abstract') &&
+    (sourceType === 'uploaded_document' || sourceType === 'original_abstract' || sourceType === 'openalex_abstract' || sourceType === 'crossref_abstract') &&
     article.openAccess?.contentText?.trim()
   ) {
     return article.openAccess.contentText.trim();

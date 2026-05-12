@@ -125,7 +125,7 @@
 
     /* ── MAIN ── */
     #main {
-      max-width: 860px;
+      max-width: 1180px;
       margin: 0 auto;
       padding: 2.5rem 2rem 5rem;
     }
@@ -320,44 +320,115 @@
       padding: 0.18rem 0.55rem;
     }
 
-    /* ── FILTER-BAR ── */
+    /* ── INBOX LAYOUT + FILTERS ── */
+    .inbox-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 1rem;
+      margin-bottom: 1.75rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .page-title-kicker {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.24rem;
+      color: rgba(255,255,255,0.38);
+      margin-bottom: 0.2rem;
+    }
+    .page-title {
+      font-size: clamp(1.6rem, 3vw, 2.35rem);
+      line-height: 1.12;
+      font-weight: 600;
+      letter-spacing: 0.01rem;
+    }
+    .inbox-layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+      gap: 1.4rem;
+      align-items: start;
+    }
+    .filter-sidebar {
+      position: sticky;
+      top: 5.25rem;
+      border: 1px solid rgba(255,255,255,0.1);
+      background-color: rgba(255,255,255,0.035);
+      border-radius: 4px;
+      padding: 1rem;
+    }
+    .filter-sidebar-title {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.22rem;
+      color: rgba(255,255,255,0.5);
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+    }
+    .filter-sidebar-note {
+      margin-top: 0.9rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      font-size: 0.72rem;
+      line-height: 1.45;
+      color: rgba(255,255,255,0.38);
+    }
     .filter-bar {
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: column;
       gap: 0.5rem;
-      align-items: center;
-      padding: 0.8rem 0 1.5rem;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      margin-bottom: 1.5rem;
+      align-items: stretch;
     }
     .filter-toggle {
       display: inline-flex;
       align-items: center;
+      justify-content: space-between;
       gap: 0.5rem;
-      padding: 0.4rem 0.85rem;
+      width: 100%;
+      padding: 0.42rem 0.15rem;
       background-color: transparent;
-      border: 1px solid rgba(255,255,255,0.12);
+      border: 0;
       color: rgba(255,255,255,0.5);
       font-family: inherit;
       font-size: 0.75rem;
-      letter-spacing: 0.05rem;
-      border-radius: 3px;
+      letter-spacing: 0.04rem;
       cursor: pointer;
       transition: all 0.18s ease;
+      text-align: left;
     }
-    .filter-toggle:hover { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.75); }
-    .filter-toggle.active { color: #fff; border-color: rgba(255,255,255,0.35); background-color: rgba(255,255,255,0.04); }
-    .filter-toggle:not(.active) .filter-dot { opacity: 0.3; }
-    .filter-dot {
+    .filter-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-width: 0;
+    }
+    .filter-toggle:hover { color: rgba(255,255,255,0.78); }
+    .filter-toggle.active { color: #fff; }
+    .filter-checkbox {
       display: inline-block;
-      width: 0.5rem;
-      height: 0.5rem;
-      border-radius: 50%;
-      transition: opacity 0.18s ease;
+      width: 0.9rem;
+      height: 0.9rem;
+      border: 1px solid rgba(255,255,255,0.28);
+      border-radius: 2px;
+      position: relative;
+      flex-shrink: 0;
+      transition: border-color 0.18s, background-color 0.18s;
     }
-    .filter-dot.dot-full { background-color: var(--accent); }
-    .filter-dot.dot-abstract { background-color: rgba(255,255,255,0.4); }
-    .filter-dot.dot-unusable { background-color: #f87171; }
+    .filter-toggle.active .filter-checkbox {
+      border-color: var(--accent);
+      background-color: var(--accent);
+    }
+    .filter-toggle.active .filter-checkbox::after {
+      content: '';
+      position: absolute;
+      left: 0.24rem;
+      top: 0.08rem;
+      width: 0.28rem;
+      height: 0.5rem;
+      border: solid #101412;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
     .filter-count {
       font-variant-numeric: tabular-nums;
       color: rgba(255,255,255,0.45);
@@ -365,12 +436,19 @@
     }
     .filter-toggle.active .filter-count { color: rgba(255,255,255,0.7); }
 
-    /* Sort-group skubbes til højre i filter-baren */
+    .inbox-results { min-width: 0; }
+    .sort-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
     .sort-group {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      margin-left: auto;
     }
     .sort-group-label {
       font-size: 0.7rem;
@@ -398,6 +476,21 @@
     .sort-select:focus { outline: none; border-color: var(--accent); }
     .sort-select option { background-color: #1a1a1a; color: #fff; }
 
+    @media (max-width: 900px) {
+      #main { max-width: 860px; }
+      .inbox-head { align-items: flex-start; flex-direction: column; }
+      .inbox-layout { grid-template-columns: 1fr; }
+      .filter-sidebar { position: static; }
+      .filter-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .sort-toolbar { justify-content: flex-start; }
+    }
+
+    @media (max-width: 560px) {
+      .filter-bar { grid-template-columns: 1fr; }
+      .sort-group { align-items: flex-start; flex-direction: column; width: 100%; }
+      .sort-select { width: 100%; }
+    }
+
     /* ── PAGINATION ── */
     .pagination {
       display: flex;
@@ -420,6 +513,131 @@
       gap: 0.3rem;
       align-items: center;
       justify-content: center;
+    }
+
+    /* ── EGNE KILDER ── */
+    .document-upload-panel {
+      border: 1px dashed rgba(255,255,255,0.22);
+      background-color: rgba(255,255,255,0.035);
+      border-radius: 4px;
+      padding: 1.1rem;
+      margin-bottom: 1.25rem;
+    }
+    .document-upload-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.16rem;
+      margin-bottom: 0.35rem;
+    }
+    .document-upload-help {
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.58);
+      margin-bottom: 0.9rem;
+    }
+    .document-upload-input {
+      width: 100%;
+      color: rgba(255,255,255,0.72);
+      font-size: 0.78rem;
+    }
+    .document-upload-status {
+      margin-top: 0.7rem;
+      font-size: 0.78rem;
+      color: var(--accent);
+    }
+    .document-upload-status.is-error { color: #f87171; }
+    .document-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .document-card {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: center;
+      border: 1px solid rgba(255,255,255,0.12);
+      background-color: rgba(255,255,255,0.04);
+      border-radius: 4px;
+      padding: 1rem 1.1rem;
+      transition: opacity 0.2s, border-color 0.2s;
+    }
+    .document-card.removing { opacity: 0.45; }
+    .document-card-label {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.22rem;
+      color: #60a5fa;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .document-card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .document-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.45rem;
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.5);
+    }
+    .document-card-meta span {
+      background-color: rgba(255,255,255,0.06);
+      border-radius: 3px;
+      padding: 0.12rem 0.45rem;
+    }
+    .document-trash {
+      width: 2.2rem;
+      height: 2.2rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 4px;
+      background: transparent;
+      color: rgba(255,255,255,0.72);
+      cursor: pointer;
+      transition: color 0.18s, border-color 0.18s, background-color 0.18s;
+      flex-shrink: 0;
+    }
+    .document-trash:hover {
+      color: #f87171;
+      border-color: rgba(248,113,113,0.55);
+      background-color: rgba(248,113,113,0.08);
+    }
+    .document-trash-icon {
+      width: 0.82rem;
+      height: 0.92rem;
+      display: block;
+      position: relative;
+      border: 1.8px solid currentColor;
+      border-top: 0;
+      border-radius: 0 0 2px 2px;
+      pointer-events: none;
+    }
+    .document-trash-icon::before {
+      content: '';
+      position: absolute;
+      left: -0.18rem;
+      top: -0.28rem;
+      width: 1.12rem;
+      height: 1.8px;
+      background-color: currentColor;
+      border-radius: 2px;
+    }
+    .document-trash-icon::after {
+      content: '';
+      position: absolute;
+      left: 0.23rem;
+      top: -0.5rem;
+      width: 0.34rem;
+      height: 0.18rem;
+      border: 1.8px solid currentColor;
+      border-bottom: 0;
+      border-radius: 2px 2px 0 0;
     }
     .page-btn {
       min-width: 2.2rem;
@@ -1461,6 +1679,9 @@
       <a class="nav-link" id="nav-til-behandling" onclick="showView('til-behandling')">
         Udkast <span class="nav-badge" id="til-behandling-badge">—</span>
       </a>
+      <a class="nav-link" id="nav-documents" onclick="showView('documents')">
+        Egne kilder <span class="nav-badge" id="documents-badge">—</span>
+      </a>
       <a class="nav-link" id="nav-arkiv" onclick="showView('arkiv')">
         Arkiv <span class="nav-badge" id="arkiv-badge">—</span>
       </a>
@@ -1471,29 +1692,17 @@
 
     <!-- INBOX -->
     <div class="view active" id="view-inbox">
-      <div class="section-heading">
-        <span>Nye artikler fra videnskabskilder</span>
+      <div class="inbox-head">
+        <div>
+          <div class="page-title-kicker">Artikeloverblik</div>
+          <h1 class="page-title">Forslag til videnskabsartikler</h1>
+        </div>
         <span class="section-actions">
           <button class="btn-crawl" id="btn-crawl">Crawl nu</button>
         </span>
       </div>
-      <div class="filter-bar" id="filter-bar">
-        <button class="filter-toggle active" data-bucket="full">
-          <span class="filter-dot dot-full"></span>
-          <span class="filter-text">Fuldtekst</span>
-          <span class="filter-count" data-count="full">0</span>
-        </button>
-        <button class="filter-toggle active" data-bucket="abstract">
-          <span class="filter-dot dot-abstract"></span>
-          <span class="filter-text">Kun abstract</span>
-          <span class="filter-count" data-count="abstract">0</span>
-        </button>
-        <button class="filter-toggle" id="toggle-unusable" type="button">
-          <span class="filter-dot dot-unusable"></span>
-          <span class="filter-text">Artikler uden adgang</span>
-          <span class="filter-count" data-count="unusable">0</span>
-        </button>
 
+      <div class="sort-toolbar">
         <div class="sort-group">
           <label class="sort-group-label" for="sort-select">Sortér efter</label>
           <select id="sort-select" class="sort-select">
@@ -1502,17 +1711,57 @@
           </select>
         </div>
       </div>
-      <div id="inbox-loading" class="loading-pulse">Henter artikler…</div>
-      <div class="article-list" id="article-list"></div>
-      <div class="pagination" id="pagination"></div>
-      <div id="done-message">
-        <div class="done-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-        </div>
-        <div class="done-title">Puljen er gennemgået</div>
-        <div class="done-text">Du er igennem alle artikler i denne pulje.</div>
+
+      <div class="inbox-layout">
+        <aside class="filter-sidebar" aria-label="Filtre">
+          <div class="filter-sidebar-title">Filtrér kilder</div>
+          <div class="filter-bar" id="filter-bar">
+            <button class="filter-toggle active" data-bucket="full" aria-pressed="true">
+              <span class="filter-main">
+                <span class="filter-checkbox" aria-hidden="true"></span>
+                <span class="filter-text">Fuldtekst</span>
+              </span>
+              <span class="filter-count" data-count="full">0</span>
+            </button>
+            <button class="filter-toggle active" data-bucket="abstract" aria-pressed="true">
+              <span class="filter-main">
+                <span class="filter-checkbox" aria-hidden="true"></span>
+                <span class="filter-text">Kun abstract</span>
+              </span>
+              <span class="filter-count" data-count="abstract">0</span>
+            </button>
+            <button class="filter-toggle active" id="toggle-documents" type="button" aria-pressed="true">
+              <span class="filter-main">
+                <span class="filter-checkbox" aria-hidden="true"></span>
+                <span class="filter-text">Egne dokumenter</span>
+              </span>
+              <span class="filter-count" data-count="documents">0</span>
+            </button>
+            <button class="filter-toggle" id="toggle-unusable" type="button" aria-pressed="false">
+              <span class="filter-main">
+                <span class="filter-checkbox" aria-hidden="true"></span>
+                <span class="filter-text">Artikler uden adgang</span>
+              </span>
+              <span class="filter-count" data-count="unusable">0</span>
+            </button>
+          </div>
+          <div class="filter-sidebar-note">Her kan vi senere tilføje emner, målgrupper og indholdstyper.</div>
+        </aside>
+
+        <section class="inbox-results">
+          <div id="inbox-loading" class="loading-pulse">Henter artikler…</div>
+          <div class="article-list" id="article-list"></div>
+          <div class="pagination" id="pagination"></div>
+          <div id="done-message">
+            <div class="done-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <div class="done-title">Puljen er gennemgået</div>
+            <div class="done-text">Du er igennem alle artikler i denne pulje.</div>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -1529,6 +1778,22 @@
     <!-- UDKAST (åbnes fra udkast-overblik) -->
     <div class="view" id="view-udkast">
       <div id="draft-container"></div>
+    </div>
+
+    <!-- EGNE KILDER -->
+    <div class="view" id="view-documents">
+      <div class="section-heading">Egne kilder</div>
+      <div class="document-upload-panel">
+        <div class="document-upload-title">Upload dokument</div>
+        <div class="document-upload-help">
+          PDF og tekstfiler bliver læst ind som selvstændige kilder og vises i inbox med labelen “Egen kilde / dokument”.
+        </div>
+        <input class="document-upload-input" id="document-upload" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" />
+        <div class="document-upload-status" id="document-upload-status"></div>
+      </div>
+      <div class="document-list" id="document-list">
+        <div class="archive-empty">Ingen egne dokumenter uploadet endnu.</div>
+      </div>
     </div>
 
     <!-- ARKIV -->

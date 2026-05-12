@@ -10,6 +10,7 @@ import {
   accessBucket,
   abstractLength,
   abstractQuality,
+  isUploadedDocument,
 } from '../utils/scoring';
 
 const ARROW_SVG = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -158,6 +159,21 @@ function buildAccessInfo(article: Article): string {
   const sourceHost = oa?.contentSourceHost || hostnameOf(oa?.contentSourceUrl) || hostnameOf(article.url);
   const sourceType = oa?.contentSourceType;
 
+  if (isUploadedDocument(article)) {
+    const len = article.openAccess?.contentTextLength || (article.teaser || '').replace(/\s+/g, ' ').trim().length;
+    const fileName = article.uploadedDocument?.fileName || article.title;
+    return `
+      <div class="access-info access-full access-document">
+        <span class="access-info-dot"></span>
+        <div class="access-info-body">
+          <div class="access-info-title">Egen kilde / dokument</div>
+          <div class="access-info-detail">
+            Uploadet dokument: <strong>${escapeHtml(fileName)}</strong>. Tekstgrundlag på ca. <strong>${formatNumber(len)} tegn</strong> bruges til generering.
+          </div>
+        </div>
+      </div>`;
+  }
+
   if (oa?.canGenerate === false) {
     return `
       <div class="access-info access-unusable">
@@ -232,6 +248,18 @@ function formatNumber(value: number): string {
 }
 
 function buildSourceLinks(article: Article): string {
+  if (isUploadedDocument(article)) {
+    const fileName = article.uploadedDocument?.fileName || article.title;
+    return `
+      <div class="source-links">
+        <span class="card-source-link source-used source-document">
+          <span class="source-link-label">Egen kilde</span>
+          <span class="source-link-host">${escapeHtml(fileName)}</span>
+          <span class="source-link-badge source-link-badge-full">Dokument</span>
+        </span>
+      </div>`;
+  }
+
   const originalHost = hostnameOf(article.url) || article.url;
   const oaUrl = article.openAccess?.oaUrl;
   const oaHost = hostnameOf(oaUrl);

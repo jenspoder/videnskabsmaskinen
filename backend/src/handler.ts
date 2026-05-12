@@ -1,14 +1,29 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import * as crypto from 'crypto';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
-import { loadJsonOrDefault, saveJson, saveArticle, deleteArticle, loadArticle, listArticlesInFolder, moveArticle, SOURCES_KEY } from './s3Store';
+import {
+  loadJsonOrDefault,
+  saveJson,
+  saveArticle,
+  deleteArticle,
+  loadArticle,
+  listArticlesInFolder,
+  moveArticle,
+  saveObject,
+  deleteObject,
+  saveUploadedDocument,
+  loadUploadedDocument,
+  deleteUploadedDocument,
+  listUploadedDocuments,
+  SOURCES_KEY,
+} from './s3Store';
 import { crawlOneSource } from './crawler/crawlOneSource';
 import { crawlRssSource } from './crawler/crawlRssSource';
 import { generateArticle } from './process/bonzai';
 import { createWordPressDraft } from './process/wordpress';
 import { rankArticle } from './process/rankArticle';
 import { fetchArticleBody } from './process/fetchArticleBody';
-import { Article, SourcesStore, CrawlResult } from './types';
+import { Article, SourcesStore, CrawlResult, UploadedDocument } from './types';
 
 const lambdaClient = new LambdaClient({});
 
@@ -75,6 +90,11 @@ export async function handler(event: any): Promise<any> {
 
     if (method === 'GET' && path === '/articles') return handleGetArticles(e);
 
+    if (method === 'GET' && path === '/documents') return handleGetDocuments();
+    if (method === 'POST' && path === '/documents') return handleUploadDocument(e);
+    const documentDeleteMatch = path.match(/^\/documents\/([^/]+)\/delete$/);
+    if (method === 'POST' && documentDeleteMatch) return handleDeleteDocument(documentDeleteMatch[1]);
+
     const jobIdMatch = path.match(/^\/jobs\/([^/]+)$/);
     if (method === 'GET' && jobIdMatch) return handleGetJob(jobIdMatch[1]);
     const cancelJobMatch = path.match(/^\/jobs\/([^/]+)\/cancel$/);
@@ -104,6 +124,132 @@ async function handleGetArticles(event: APIGatewayProxyEventV2): Promise<APIGate
   const folder = status === 'reviewed' ? 'reviewed' : 'inbox';
   const articles = await listArticlesInFolder(folder);
   return json(200, { articles, count: articles.length });
+}
+
+async function handleGetDocuments(): Promise<APIGatewayProxyResultV2> {
+  const documents = await listUploadedDocuments();
+  return json(200, { documents, count: documents.length });
+}
+
+async function handleUploadDocument(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  const body = event.body ? JSON.parse(event.body) : {};
+  const fileName = typeof body.fileName === 'string' ? body.fileName.trim() : '';
+  const contentType = typeof body.contentType === 'string' ? body.contentType : 'application/octet-stream';
+  const dataBase64 = typeof body.dataBase64 === 'string' ? body.dataBase64 : '';
+
+  if (!fileName || !dataBase64) {
+    return json(400, { error: 'Mangler filnavn eller filindhold' });
+  }
+
+  if (!isSupportedDocumentType(contentType, fileName)) {
+    return json(400, { error: 'Kun PDF og tekstfiler understøttes i første version' });
+  }
+
+  const buffer = Buffer.from(dataBase64, 'base64');
+  if (buffer.byteLength > 8 * 1024 * 1024) {
+    return json(413, { error: 'Filen er for stor til direkte upload. Maks 8 MB i demo-versionen.' });
+  }
+
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'document';
+  const objectKey = `documents/original/${id}-${safeName}`;
+
+  let text: string;
+  try {
+    text = normalizeDocumentText(await extractDocumentText(buffer, contentType, fileName));
+  } catch (error) {
+    return json(400, { error: error instanceof Error ? error.message : 'Kunne ikke udtrække tekst fra dokumentet' });
+  }
+
+  if (text.length < 200) {
+    return json(400, { error: 'Dokumentet indeholder for lidt udtrækkelig tekst. Scannede PDF’er kræver Textract/OCR.' });
+  }
+
+  await saveObject(objectKey, buffer, contentType);
+
+  const title = titleFromFileName(fileName);
+  const articleId = crypto.createHash('sha1').update(`uploaded-document:${id}`).digest('hex');
+  const article: Article = {
+    id: articleId,
+    customerId: 'science-media-company',
+    sourceId: 'uploaded-documents',
+    sourceType: 'uploaded_document',
+    title,
+    url: `uploaded-document://${id}`,
+    teaser: text,
+    discoveredAt: now,
+    status: 'new',
+    angle: '',
+    reviewedAt: null,
+    publishedAt: null,
+    wordpressPostId: null,
+    relevanceScore: null,
+    relevanceBucket: null,
+    relevanceBreakdown: null,
+    relevanceSummary: null,
+    relevanceAngle: null,
+    suggestedTitle: null,
+    suggestedExcerpt: null,
+    rankedAt: null,
+    openAccess: {
+      checked: true,
+      checkedAt: now,
+      doi: null,
+      inOpenAlex: false,
+      isOa: true,
+      oaStatus: null,
+      license: null,
+      oaUrl: null,
+      hasUsableFulltext: true,
+      contentSourceType: 'uploaded_document',
+      contentSourceUrl: `uploaded-document://${id}`,
+      contentSourceHost: 'Egne dokumenter',
+      contentTextLength: text.length,
+      contentText: text,
+      canGenerate: true,
+    },
+    uploadedDocument: {
+      id,
+      fileName,
+      contentType,
+      objectKey,
+    },
+  };
+
+  const document: UploadedDocument = {
+    id,
+    articleId,
+    customerId: article.customerId,
+    fileName,
+    contentType,
+    objectKey,
+    status: 'ready',
+    title,
+    textLength: text.length,
+    error: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const rankedArticle = await rankUploadedDocumentArticle(article);
+
+  await Promise.all([saveArticle(rankedArticle), saveUploadedDocument(document)]);
+  return json(201, { document, article: rankedArticle });
+}
+
+async function handleDeleteDocument(id: string): Promise<APIGatewayProxyResultV2> {
+  const document = await loadUploadedDocument(id);
+  if (!document) return json(404, { error: 'Dokument ikke fundet' });
+
+  await Promise.allSettled([
+    deleteArticle('inbox', document.articleId),
+    deleteArticle('reviewed', document.articleId),
+    deleteObject(document.objectKey),
+    deleteUploadedDocument(id),
+  ]);
+
+  return json(200, { ok: true, id });
 }
 
 async function handlePatchArticle(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
@@ -329,6 +475,13 @@ async function safeFetchBody(article: { url: string; openAccess?: any }): Promis
   const primaryUrl = pickBestSourceUrl(article);
   const sourceType = article.openAccess?.contentSourceType;
 
+  if (sourceType === 'uploaded_document') {
+    return {
+      body: typeof article.openAccess?.contentText === 'string' ? article.openAccess.contentText : '',
+      sourceUrl: article.url,
+    };
+  }
+
   // Hvis genereringsgrundlaget kun er et abstract, ligger teksten allerede
   // i article.teaser. Vi skal ikke forsøge at hente en paywall/Cloudflare-side
   // og risikere støj som brødtekst.
@@ -366,6 +519,8 @@ function describeGenerationSource(article: { url: string; openAccess?: any }, fe
       return `Renset fuldtekstuddrag hentet fra originalkilden${host ? ` (${host})` : ''}. Støj som navigation, metadata, interessekonflikter, funding og størstedelen af referencesektionen er filtreret fra. Hvis artiklen er længere end ca. 10.000 tegn, er uddraget prioriteret ned til ca. 10.000 tegn og kan indeholde få udvalgte referencepunkter, ikke den fulde kildeliste.`;
     case 'oa_fulltext':
       return `Renset fuldtekstuddrag hentet fra verificeret Open Access-kilde${host ? ` (${host})` : ''}. Støj som navigation, metadata, interessekonflikter, funding og størstedelen af referencesektionen er filtreret fra. Hvis artiklen er længere end ca. 10.000 tegn, er uddraget prioriteret ned til ca. 10.000 tegn og kan indeholde få udvalgte referencepunkter, ikke den fulde kildeliste.`;
+    case 'uploaded_document':
+      return `Teksten er udtrukket fra et uploadet dokument (${textLength} tegn). Dokumentet bruges som selvstændig kilde i samme flow som øvrige artikler.`;
     case 'original_abstract':
       return `Kun offentligt abstract fra originalkilden${host ? ` (${host})` : ''} er tilgængeligt (${textLength} tegn). Skriv kun ud fra abstractet.`;
     case 'openalex_abstract':
@@ -382,7 +537,7 @@ function describeGenerationSource(article: { url: string; openAccess?: any }, fe
 function bestGenerationTeaser(article: { teaser: string; openAccess?: any }): string {
   const sourceType = article.openAccess?.contentSourceType;
   if (
-    (sourceType === 'original_abstract' || sourceType === 'openalex_abstract' || sourceType === 'crossref_abstract') &&
+    (sourceType === 'uploaded_document' || sourceType === 'original_abstract' || sourceType === 'openalex_abstract' || sourceType === 'crossref_abstract') &&
     typeof article.openAccess?.contentText === 'string' &&
     article.openAccess.contentText.trim()
   ) {
@@ -397,6 +552,62 @@ function hostOf(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+function isSupportedDocumentType(contentType: string, fileName: string): boolean {
+  const lowerName = fileName.toLowerCase();
+  return contentType === 'application/pdf' ||
+    contentType.startsWith('text/') ||
+    lowerName.endsWith('.pdf') ||
+    lowerName.endsWith('.txt') ||
+    lowerName.endsWith('.md');
+}
+
+async function extractDocumentText(buffer: Buffer, contentType: string, fileName: string): Promise<string> {
+  const lowerName = fileName.toLowerCase();
+  if (contentType === 'application/pdf' || lowerName.endsWith('.pdf')) {
+    return extractPdfText(buffer);
+  }
+  if (contentType.startsWith('text/') || lowerName.endsWith('.txt') || lowerName.endsWith('.md')) {
+    return buffer.toString('utf8');
+  }
+  throw new Error('Filtypen understøttes ikke endnu');
+}
+
+function extractPdfText(buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const requirePdf2Json = eval('require') as NodeRequire;
+    const PDFParser = requirePdf2Json('pdf2json') as any;
+    const parser = new PDFParser(null, true);
+
+    parser.on('pdfParser_dataError', (error: any) => {
+      reject(error?.parserError ?? error ?? new Error('Kunne ikke parse PDF'));
+    });
+    parser.on('pdfParser_dataReady', () => {
+      try {
+        resolve(parser.getRawTextContent() || '');
+      } catch (error) {
+        reject(error);
+      } finally {
+        parser.destroy?.();
+      }
+    });
+    parser.parseBuffer(buffer);
+  });
+}
+
+function normalizeDocumentText(text: string): string {
+  return text
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function titleFromFileName(fileName: string): string {
+  const base = fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  if (!base) return 'Uploadet dokument';
+  return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
 async function handleRankArticle(id: string): Promise<APIGatewayProxyResultV2> {
@@ -440,8 +651,24 @@ function canRankArticle(article: Article): boolean {
 
 async function rankAndPersist(article: Article): Promise<Article> {
   const result = await rankArticle(article);
+  const updated = applyRankResult(article, result);
+  await saveArticle(updated);
+  return updated;
+}
+
+async function rankUploadedDocumentArticle(article: Article): Promise<Article> {
+  try {
+    const result = await rankArticle(article);
+    return applyRankResult(article, result);
+  } catch (error) {
+    console.warn(`Kunne ikke rangere uploadet dokument ${article.id}:`, error);
+    return article;
+  }
+}
+
+function applyRankResult(article: Article, result: Awaited<ReturnType<typeof rankArticle>>): Article {
   const { relevanceRationale: _ignored, ...rest } = article as any;
-  const updated: Article = {
+  return {
     ...rest,
     relevanceScore: result.score,
     relevanceBucket: result.bucket,
@@ -452,8 +679,6 @@ async function rankAndPersist(article: Article): Promise<Article> {
     suggestedExcerpt: result.suggestedExcerpt,
     rankedAt: new Date().toISOString(),
   };
-  await saveArticle(updated);
-  return updated;
 }
 
 async function handlePostCrawl(): Promise<APIGatewayProxyResultV2> {

@@ -1,4 +1,4 @@
-import type { Article } from './types';
+import type { Article, UploadedDocument } from './types';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 
@@ -18,6 +18,27 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export async function listArticles(status: 'inbox' | 'reviewed'): Promise<Article[]> {
   const data = await request<{ articles: Article[] }>(`/articles?status=${status}`);
   return data.articles;
+}
+
+export async function listDocuments(): Promise<UploadedDocument[]> {
+  const data = await request<{ documents: UploadedDocument[] }>('/documents');
+  return data.documents;
+}
+
+export async function uploadDocument(file: File): Promise<{ document: UploadedDocument; article: Article }> {
+  const dataBase64 = await fileToBase64(file);
+  return request<{ document: UploadedDocument; article: Article }>('/documents', {
+    method: 'POST',
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType: file.type || guessContentType(file.name),
+      dataBase64,
+    }),
+  });
+}
+
+export async function deleteDocument(id: string): Promise<{ ok: boolean; id: string }> {
+  return request<{ ok: boolean; id: string }>(`/documents/${id}/delete`, { method: 'POST' });
 }
 
 export async function patchArticle(
@@ -137,4 +158,24 @@ export interface RankInboxResult {
 export async function rankInbox(force = false): Promise<RankInboxResult> {
   const qs = force ? '?force=true' : '';
   return request<RankInboxResult>(`/articles/rank${qs}`, { method: 'POST' });
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      resolve(result.includes(',') ? result.split(',').pop() || '' : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Kunne ikke læse fil'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function guessContentType(fileName: string): string {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.txt')) return 'text/plain';
+  if (lower.endsWith('.md')) return 'text/markdown';
+  return 'application/octet-stream';
 }

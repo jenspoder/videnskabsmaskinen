@@ -1,5 +1,6 @@
 import type { SelectedArticle } from '../store';
 import { removeSelected, getDraft, updateAngle } from '../store';
+import { isUploadedDocument } from '../utils/scoring';
 
 const ARROW_SVG = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
   <path d="M2 10L10 2M5 2h5v5"/>
@@ -17,6 +18,7 @@ export function buildSelectedCard(
   card.id = `selected-${article.id}`;
 
   const hostname = (() => {
+    if (isUploadedDocument(article)) return article.uploadedDocument?.fileName || 'Egen kilde';
     try { return new URL(article.url).hostname.replace('www.', ''); }
     catch { return article.url; }
   })();
@@ -33,6 +35,16 @@ export function buildSelectedCard(
     const isGenerating = !draft && generation?.status === 'generating';
     const isFailed = !draft && generation?.status === 'failed';
     const isCanceled = !draft && generation?.status === 'canceled';
+    const titleHtml = isUploadedDocument(state.article)
+      ? `<div class="selected-title">${escape(ideaTitle)}</div>`
+      : `<a href="${escape(article.url)}" target="_blank" rel="noopener" class="selected-title-link">
+          <div class="selected-title">${escape(ideaTitle)}</div>
+        </a>`;
+    const sourceHtml = isUploadedDocument(state.article)
+      ? `<span class="card-source-link">Egen kilde: ${escape(hostname)}</span>`
+      : `<a href="${escape(article.url)}" target="_blank" rel="noopener" class="card-source-link">
+          Originalkilde: ${escape(hostname)} ${ARROW_SVG}
+        </a>`;
     const draftBadge = draft
       ? `<span class="draft-badge has-draft">Udkast klar</span>`
       : isQueued
@@ -50,13 +62,9 @@ export function buildSelectedCard(
     card.innerHTML = `
       <div class="selected-head">
         <div class="selected-title-block">
-          <a href="${escape(article.url)}" target="_blank" rel="noopener" class="selected-title-link">
-            <div class="selected-title">${escape(ideaTitle)}</div>
-          </a>
+          ${titleHtml}
           ${ideaExcerpt ? `<div class="selected-excerpt">${escape(ideaExcerpt)}</div>` : ''}
-          <a href="${escape(article.url)}" target="_blank" rel="noopener" class="card-source-link">
-            Originalkilde: ${escape(hostname)} ${ARROW_SVG}
-          </a>
+          ${sourceHtml}
         </div>
         ${draftBadge}
       </div>

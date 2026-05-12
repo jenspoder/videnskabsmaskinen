@@ -13,6 +13,7 @@ export type OaStatus = 'gold' | 'green' | 'hybrid' | 'bronze' | 'closed' | 'unkn
 export type ContentSourceType =
   | 'original_fulltext'
   | 'oa_fulltext'
+  | 'uploaded_document'
   | 'original_abstract'
   | 'openalex_abstract'
   | 'crossref_abstract'
@@ -43,6 +44,7 @@ export interface Article {
   id: string;
   customerId: string;
   sourceId: string;
+  sourceType?: 'rss' | 'html' | 'uploaded_document';
   title: string;
   url: string;
   teaser: string;
@@ -61,4 +63,25 @@ export interface Article {
   suggestedExcerpt?: string | null;
   rankedAt: string | null;
   openAccess?: OpenAccessInfo | null;
+  uploadedDocument?: {
+    id: string;
+    fileName: string;
+    contentType: string;
+    objectKey: string;
+  } | null;
+}
+
+export interface UploadedDocument {
+  id: string;
+  articleId: string;
+  customerId: string;
+  fileName: string;
+  contentType: string;
+  objectKey: string;
+  status: 'ready' | 'failed';
+  title: string;
+  textLength: number;
+  error?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

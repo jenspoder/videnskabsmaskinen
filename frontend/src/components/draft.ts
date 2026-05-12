@@ -3,7 +3,7 @@ import { saveDraft, getDraft } from '../store';
 import { generateMockDraft } from '../mockGenerate';
 import { generateDraft as generateDraftViaApi } from '../api';
 import type { GenerateDraftJob } from '../api';
-import { accessBucket, abstractLength } from '../utils/scoring';
+import { accessBucket, abstractLength, isUploadedDocument } from '../utils/scoring';
 import type { Article } from '../types';
 
 export interface DraftViewCallbacks {
@@ -189,14 +189,7 @@ export function renderDraftView(
     </div>
 
     <div class="draft-meta">
-      <div class="draft-meta-row">
-        <span class="draft-meta-label">Kilde</span>
-        <span class="draft-meta-value">
-          <a href="${escape(article.url)}" target="_blank" rel="noopener" class="draft-source-link">
-            ${escape(article.title)}
-          </a>
-        </span>
-      </div>
+      ${buildPrimarySourceRow(article)}
       ${buildOaSourceRow(article)}
       <div class="draft-meta-row">
         <span class="draft-meta-label">Vinkel</span>
@@ -315,7 +308,15 @@ function buildQualityBanner(article: Article): string {
   let body: string;
   let checklist: string[];
 
-  if (accessBucket(article) === 'full') {
+  if (isUploadedDocument(article)) {
+    variant = 'full';
+    title = `Egen kilde — ${abstractLen} tegn`;
+    body = `Udkastet er genereret på grundlag af tekst udtrukket fra det uploadede dokument.`;
+    checklist = [
+      'Verificer at PDF-udtrækket ikke har tabt tabeller, figurer eller noter',
+      'Tjek at vinklen stadig passer til dokumentets formål og kontekst',
+    ];
+  } else if (accessBucket(article) === 'full') {
     variant = 'full';
     title = 'Fuldtekst tilgængelig';
     body = `Udkastet er genereret på grundlag af hele artiklen${host ? ` (Open Access-version på <em>${escape(host)}</em>)` : ''}.`;
@@ -362,6 +363,31 @@ function buildQualityBanner(article: Article): string {
       </div>
       <div class="draft-quality-body">${body}</div>
       <ul class="draft-quality-checklist">${items}</ul>
+    </div>`;
+}
+
+function buildPrimarySourceRow(article: Article): string {
+  if (isUploadedDocument(article)) {
+    const fileName = article.uploadedDocument?.fileName || article.title;
+    return `
+      <div class="draft-meta-row">
+        <span class="draft-meta-label">Kilde</span>
+        <span class="draft-meta-value">
+          ${escape(article.title)}
+          <span class="source-link-badge source-link-badge-full">Egen kilde</span>
+          <span class="draft-source-filename">${escape(fileName)}</span>
+        </span>
+      </div>`;
+  }
+
+  return `
+    <div class="draft-meta-row">
+      <span class="draft-meta-label">Kilde</span>
+      <span class="draft-meta-value">
+        <a href="${escape(article.url)}" target="_blank" rel="noopener" class="draft-source-link">
+          ${escape(article.title)}
+        </a>
+      </span>
     </div>`;
 }
 

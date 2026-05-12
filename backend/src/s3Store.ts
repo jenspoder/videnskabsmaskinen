@@ -5,7 +5,7 @@ import {
   DeleteObjectCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
-import { Article } from './types';
+import { Article, UploadedDocument } from './types';
 
 const s3Client = new S3Client({});
 const BUCKET = process.env.BUCKET || 'videnskabsmaskinen-articles';
@@ -14,6 +14,10 @@ export const SOURCES_KEY = 'articles/sources.json';
 
 function articleKey(folder: 'inbox' | 'reviewed', id: string): string {
   return `articles/${folder}/${id}.json`;
+}
+
+function documentKey(id: string): string {
+  return `documents/${id}.json`;
 }
 
 export async function loadJsonOrDefault<T>(key: string, defaultValue: T): Promise<T> {
@@ -41,6 +45,21 @@ export async function saveJson(key: string, value: unknown): Promise<void> {
   );
 }
 
+export async function saveObject(key: string, body: Buffer, contentType: string): Promise<void> {
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    })
+  );
+}
+
+export async function deleteObject(key: string): Promise<void> {
+  await s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+}
+
 export async function saveArticle(article: Article): Promise<void> {
   const folder = article.status === 'new' ? 'inbox' : 'reviewed';
   await saveJson(articleKey(folder, article.id), article);
@@ -50,6 +69,37 @@ export async function deleteArticle(folder: 'inbox' | 'reviewed', id: string): P
   await s3Client.send(
     new DeleteObjectCommand({ Bucket: BUCKET, Key: articleKey(folder, id) })
   );
+}
+
+export async function saveUploadedDocument(document: UploadedDocument): Promise<void> {
+  await saveJson(documentKey(document.id), document);
+}
+
+export async function loadUploadedDocument(id: string): Promise<UploadedDocument | null> {
+  return loadJsonOrDefault<UploadedDocument | null>(documentKey(id), null);
+}
+
+export async function deleteUploadedDocument(id: string): Promise<void> {
+  await deleteObject(documentKey(id));
+}
+
+export async function listUploadedDocuments(): Promise<UploadedDocument[]> {
+  const prefix = 'documents/';
+  const listed = await s3Client.send(
+    new ListObjectsV2Command({ Bucket: BUCKET, Prefix: prefix })
+  );
+
+  if (!listed.Contents || listed.Contents.length === 0) return [];
+
+  const documents = await Promise.all(
+    listed.Contents
+      .filter((obj) => obj.Key?.endsWith('.json'))
+      .map(async (obj) => loadJsonOrDefault<UploadedDocument | null>(obj.Key!, null))
+  );
+
+  return documents
+    .filter((doc): doc is UploadedDocument => doc !== null)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function loadArticle(

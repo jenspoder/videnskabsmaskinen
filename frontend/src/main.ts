@@ -1,16 +1,18 @@
 import type { Article } from './types';
-import { cancelDraftJob, getDraftJob, listArticles, startGenerateDraft, triggerCrawl } from './api';
+import type { UploadedDocument } from './types';
+import { cancelDraftJob, deleteDocument, getDraftJob, listArticles, listDocuments, startGenerateDraft, triggerCrawl, uploadDocument } from './api';
 import { buildInboxCard } from './components/inbox';
 import { buildArchiveCard } from './components/archive';
 import { buildSelectedCard } from './components/selected';
 import { renderDraftView } from './components/draft';
 import { addSelected, getDraft, getSelected, isSelected, saveDraft, setGenerationState } from './store';
-import { accessBucket, brugbarhedScore, isGeneratable, type AccessBucket } from './utils/scoring';
+import { accessBucket, brugbarhedScore, isGeneratable, isUploadedDocument, type AccessBucket } from './utils/scoring';
 import { generateMockDraft } from './mockGenerate';
 
 let inboxArticles: Article[] = [];
 let openAngleId: string | null = null;
 const activeBuckets: Set<AccessBucket> = new Set(['full', 'abstract']);
+let showDocuments = true;
 type SortMode = 'relevance' | 'brugbarhed';
 let sortMode: SortMode = 'relevance';
 let showUnusable = false;
@@ -25,40 +27,52 @@ let currentPage = 1;
 const inboxBadge = document.getElementById('inbox-badge')!;
 const arkivBadge = document.getElementById('arkiv-badge')!;
 const tilBehandlingBadge = document.getElementById('til-behandling-badge')!;
+const documentsBadge = document.getElementById('documents-badge')!;
 const articleList = document.getElementById('article-list')!;
 const archiveList = document.getElementById('archive-list')!;
 const selectedList = document.getElementById('selected-list')!;
+const documentList = document.getElementById('document-list')!;
+const documentUploadInput = document.getElementById('document-upload') as HTMLInputElement | null;
+const documentUploadStatus = document.getElementById('document-upload-status')!;
 const draftContainer = document.getElementById('draft-container')!;
 const doneMessage = document.getElementById('done-message')!;
 const inboxLoading = document.getElementById('inbox-loading')!;
 
 // ── Badges ────────────────────────────────────────────────────────────────────
 async function refreshBadges(): Promise<void> {
-  const [inbox, reviewed] = await Promise.all([
+  const [inbox, reviewed, documents] = await Promise.all([
     listArticles('inbox'),
     listArticles('reviewed'),
+    listDocuments(),
   ]);
   const selectedIds = new Set(getSelected().map((s) => s.article.id));
   const inboxRemaining = inbox.filter((a) => !selectedIds.has(a.id) && isGeneratable(a)).length;
   inboxBadge.textContent = String(inboxRemaining);
   arkivBadge.textContent = String(reviewed.length);
   tilBehandlingBadge.textContent = String(selectedIds.size);
+  documentsBadge.textContent = String(documents.length);
 }
 
 // ── Inbox ─────────────────────────────────────────────────────────────────────
 function visibleInboxArticles(): Article[] {
   return inboxArticles.filter((a) => {
     if (!isGeneratable(a)) return showUnusable;
+    if (isUploadedDocument(a)) return showDocuments;
     return activeBuckets.has(accessBucket(a));
   });
 }
 
 function updateFilterCounts(): void {
   const counts: Record<AccessBucket, number> = { full: 0, abstract: 0 };
+  let documents = 0;
   let unusable = 0;
   for (const a of inboxArticles) {
     if (!isGeneratable(a)) {
       unusable++;
+      continue;
+    }
+    if (isUploadedDocument(a)) {
+      documents++;
       continue;
     }
     counts[accessBucket(a)]++;
@@ -69,6 +83,8 @@ function updateFilterCounts(): void {
   }
   const unusableEl = document.querySelector('[data-count="unusable"]');
   if (unusableEl) unusableEl.textContent = String(unusable);
+  const documentsEl = document.querySelector('[data-count="documents"]');
+  if (documentsEl) documentsEl.textContent = String(documents);
 }
 
 async function renderInbox(): Promise<void> {
@@ -138,7 +154,66 @@ function showView(name: string): void {
   document.getElementById(`nav-${name}`)?.classList.add('active');
   if (name === 'arkiv') renderArchive();
   if (name === 'til-behandling') renderSelected();
+  if (name === 'documents') renderDocuments();
   if (name === 'inbox') renderInbox();
+}
+
+// ── Egne kilder ───────────────────────────────────────────────────────────────
+async function renderDocuments(): Promise<void> {
+  documentList.innerHTML = '<div class="archive-empty">Henter egne kilder…</div>';
+
+  let documents: UploadedDocument[];
+  try {
+    documents = await listDocuments();
+  } catch {
+    documentList.innerHTML = '<div class="archive-empty">Kunne ikke hente egne kilder.</div>';
+    return;
+  }
+
+  if (documents.length === 0) {
+    documentList.innerHTML = '<div class="archive-empty">Ingen egne dokumenter uploadet endnu.</div>';
+    await refreshBadges();
+    return;
+  }
+
+  documentList.innerHTML = '';
+  for (const document of documents) {
+    documentList.appendChild(buildDocumentCard(document));
+  }
+  await refreshBadges();
+}
+
+function buildDocumentCard(doc: UploadedDocument): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'document-card';
+  card.innerHTML = `
+    <div class="document-card-main">
+      <div class="document-card-label">Egen kilde / dokument</div>
+      <div class="document-card-title">${escapeHtml(doc.title)}</div>
+      <div class="document-card-meta">
+        <span>${escapeHtml(doc.fileName)}</span>
+        <span>${formatNumber(doc.textLength)} tegn</span>
+        <span>Klar i inbox</span>
+      </div>
+    </div>
+    <button class="document-trash" type="button" aria-label="Fjern ${escapeHtml(doc.fileName)}" title="Fjern dokument">
+      <span class="document-trash-icon" aria-hidden="true"></span>
+    </button>`;
+
+  card.querySelector<HTMLButtonElement>('.document-trash')?.addEventListener('click', async () => {
+    const confirmed = window.confirm(`Fjern "${doc.fileName}" fra egne kilder og inbox?`);
+    if (!confirmed) return;
+    card.classList.add('removing');
+    try {
+      await deleteDocument(doc.id);
+      await Promise.all([renderDocuments(), renderInbox(), refreshBadges()]);
+    } catch (error) {
+      card.classList.remove('removing');
+      alert(`Kunne ikke fjerne dokument: ${error instanceof Error ? error.message : 'Ukendt fejl'}`);
+    }
+  });
+
+  return card;
 }
 
 // ── Til behandling ───────────────────────────────────────────────────────────
@@ -370,10 +445,9 @@ async function handleCrawl(btn: HTMLButtonElement): Promise<void> {
 
 function renderInboxFromState(): void {
   articleList.innerHTML = '';
-  inboxArticles.sort(compareArticles);
   updateFilterCounts();
 
-  const visible = visibleInboxArticles();
+  const visible = visibleInboxArticles().sort(compareArticles);
   if (visible.length === 0 && inboxArticles.length > 0) {
     articleList.innerHTML = `<div class="archive-empty">Ingen artikler matcher de aktive filtre. Aktivér flere filtre ovenfor.</div>`;
     renderPagination(0);
@@ -466,20 +540,55 @@ function renderPagination(totalItems: number): void {
 
 // ── Sortering ─────────────────────────────────────────────────────────────────
 function compareArticles(a: Article, b: Article): number {
-  const aUsable = isGeneratable(a);
-  const bUsable = isGeneratable(b);
-  if (aUsable && !bUsable) return -1;
-  if (!aUsable && bUsable) return 1;
-
   const aRanked = a.relevanceScore != null;
   const bRanked = b.relevanceScore != null;
-  if (!aRanked && !bRanked) return 0;
+  if (!aRanked && !bRanked) return newestFirst(a, b);
   if (!aRanked) return 1;
   if (!bRanked) return -1;
+
   if (sortMode === 'relevance') {
-    return (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
+    const byRelevance = (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
+    return byRelevance || newestFirst(a, b);
   }
-  return brugbarhedScore(b) - brugbarhedScore(a);
+
+  const byBrugbarhed = brugbarhedScore(b) - brugbarhedScore(a);
+  return byBrugbarhed || ((b.relevanceScore ?? 0) - (a.relevanceScore ?? 0)) || newestFirst(a, b);
+}
+
+function newestFirst(a: Article, b: Article): number {
+  return new Date(b.discoveredAt || 0).getTime() - new Date(a.discoveredAt || 0).getTime();
+}
+
+async function handleDocumentUpload(files: FileList | null): Promise<void> {
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  if (!documentUploadInput) return;
+
+  documentUploadInput.disabled = true;
+  documentUploadStatus.textContent = `Uploader og læser ${file.name}…`;
+  documentUploadStatus.classList.remove('is-error');
+
+  try {
+    await uploadDocument(file);
+    documentUploadInput.value = '';
+    documentUploadStatus.textContent = 'Dokumentet er klar og ligger nu i inbox.';
+    await Promise.all([renderDocuments(), renderInbox(), refreshBadges()]);
+  } catch (error) {
+    documentUploadStatus.classList.add('is-error');
+    documentUploadStatus.textContent = error instanceof Error ? error.message : 'Upload fejlede.';
+  } finally {
+    documentUploadInput.disabled = false;
+  }
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('da-DK').format(value);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -496,9 +605,11 @@ document.querySelectorAll<HTMLButtonElement>('.filter-toggle').forEach((btn) => 
     if (activeBuckets.has(bucket)) {
       activeBuckets.delete(bucket);
       btn.classList.remove('active');
+      btn.setAttribute('aria-pressed', 'false');
     } else {
       activeBuckets.add(bucket);
       btn.classList.add('active');
+      btn.setAttribute('aria-pressed', 'true');
     }
     currentPage = 1;
     renderInboxFromState();
@@ -509,6 +620,16 @@ const unusableToggle = document.getElementById('toggle-unusable') as HTMLButtonE
 unusableToggle?.addEventListener('click', () => {
   showUnusable = !showUnusable;
   unusableToggle.classList.toggle('active', showUnusable);
+  unusableToggle.setAttribute('aria-pressed', String(showUnusable));
+  currentPage = 1;
+  renderInboxFromState();
+});
+
+const documentsToggle = document.getElementById('toggle-documents') as HTMLButtonElement | null;
+documentsToggle?.addEventListener('click', () => {
+  showDocuments = !showDocuments;
+  documentsToggle.classList.toggle('active', showDocuments);
+  documentsToggle.setAttribute('aria-pressed', String(showDocuments));
   currentPage = 1;
   renderInboxFromState();
 });
@@ -520,6 +641,10 @@ sortSelect?.addEventListener('change', () => {
   sortMode = value;
   currentPage = 1;
   renderInboxFromState();
+});
+
+documentUploadInput?.addEventListener('change', () => {
+  handleDocumentUpload(documentUploadInput.files);
 });
 
 renderInbox();
