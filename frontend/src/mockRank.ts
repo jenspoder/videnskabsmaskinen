@@ -32,21 +32,43 @@ const NEGATIVE_KEYWORDS: Array<{ words: string[]; weight: number; tag: string }>
   { words: ['business', 'erhverv', 'company news'], weight: -15, tag: 'branchenyt' },
 ];
 
+/**
+ * Mock-rangering — KUN til demo, ikke ægte relevansvurdering.
+ *
+ * Vi vægter title-træf fuldt og teaser-træf halvt for at undgå at
+ * lange abstracts får urealistisk høje scores bare på grund af
+ * keyword-masse. I produktion vil Bonzai score semantisk.
+ */
 export function mockRankArticle(article: Article): MockRankResult {
-  const text = `${article.title} ${article.teaser}`.toLowerCase();
+  const titleText = (article.title || '').toLowerCase();
+  const teaserText = (article.teaser || '').toLowerCase();
   const matched: string[] = [];
   const negatives: string[] = [];
 
-  let score = 35;
+  let titleBoost = 0;
+  let teaserBoost = 0;
 
   for (const { words, weight, tag } of POSITIVE_KEYWORDS) {
-    if (words.some((w) => text.includes(w))) {
-      score += weight;
+    const inTitle = words.some((w) => titleText.includes(w));
+    const inTeaser = words.some((w) => teaserText.includes(w));
+    if (inTitle) {
+      titleBoost += weight;
+      matched.push(tag);
+    } else if (inTeaser) {
+      teaserBoost += weight * 0.5;
       matched.push(tag);
     }
   }
 
+  // Loft på keyword-bonus så vi ikke automatisk rammer 100
+  // bare fordi abstractet er langt.
+  const KEYWORD_CAP = 45;
+  const positiveBoost = Math.min(KEYWORD_CAP, titleBoost + teaserBoost);
+
+  let score = 35 + positiveBoost;
+
   for (const { words, weight, tag } of NEGATIVE_KEYWORDS) {
+    const text = `${titleText} ${teaserText}`;
     if (words.some((w) => text.includes(w))) {
       score += weight;
       negatives.push(tag);

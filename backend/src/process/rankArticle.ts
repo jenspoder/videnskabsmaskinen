@@ -18,7 +18,9 @@ export interface RankResult {
 }
 
 export async function rankArticle(article: Article): Promise<RankResult> {
-  const body = await safeFetchBody(article.url);
+  const body = article.openAccess?.contentSourceType === 'original_abstract' || article.openAccess?.contentSourceType === 'openalex_abstract' || article.openAccess?.contentSourceType === 'crossref_abstract'
+    ? ''
+    : await safeFetchBody(pickBestSourceUrl(article));
   const prompt = buildPrompt(article, body);
 
   const response = await client.chat.completions.create({
@@ -95,6 +97,12 @@ function buildPrompt(article: Article, body: string): string {
 - Kilde-URL: ${article.url}
 
 Score artiklen og returner kun JSON.`;
+}
+
+function pickBestSourceUrl(article: Article): string {
+  const oa = article.openAccess;
+  if (oa?.canGenerate && oa?.contentSourceUrl) return oa.contentSourceUrl;
+  return article.url;
 }
 
 async function safeFetchBody(url: string): Promise<string> {

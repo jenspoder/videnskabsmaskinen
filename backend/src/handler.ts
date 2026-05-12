@@ -138,12 +138,13 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2, id: string): 
   article.angle = angle;
   await moveArticle(id, from, article);
 
-  const articleBody = await safeFetchBody(article.url);
+  const { body: articleBody, sourceUrl } = await safeFetchBody(article);
   const htmlContent = await generateArticle({
     title: article.title,
     teaser: article.teaser,
-    url: article.url,
+    url: sourceUrl,
     angle,
+    sourceDescription: describeGenerationSource(article, articleBody.length),
     body: articleBody,
   });
   const wpId = await createWordPressDraft(article.title, htmlContent);
@@ -242,12 +243,13 @@ async function runGenerateDraftJob(payload: GenerateJobEvent): Promise<void> {
   }
 
   try {
-    const articleBody = await safeFetchBody(article.url);
+    const { body: articleBody, sourceUrl } = await safeFetchBody(article);
     const html = await generateArticle({
       title: article.title,
       teaser: article.teaser,
-      url: article.url,
+      url: sourceUrl,
       angle,
+      sourceDescription: describeGenerationSource(article, articleBody.length),
       body: articleBody,
     });
 
@@ -255,7 +257,7 @@ async function runGenerateDraftJob(payload: GenerateJobEvent): Promise<void> {
       ...baseState,
       status: 'completed',
       title: article.title,
-      sourceUrl: article.url,
+      sourceUrl,
       angle,
       html,
       bodyFetched: articleBody.length > 0,
@@ -273,16 +275,88 @@ async function runGenerateDraftJob(payload: GenerateJobEvent): Promise<void> {
 }
 
 /**
- * Henter brødtekst gracefully — hvis sitet blokerer (fx 403 fra
- * ScienceDirect) returneres tom string, og generator/ranker falder
- * tilbage til titel+teaser. Samme mønster som i rankArticle.
+ * Vælger den bedste URL at hente brødtekst fra.
+ *
+ * Prioritet:
+ *   1. Verificeret Open Access-fuldtekst (oaUrl + hasUsableFulltext) —
+ *      typisk PMC, arXiv, eller forlagets free version som vi har
+ *      bekræftet returnerer brugbart HTML-indhold.
+ *   2. Original RSS-URL (publisher) — ofte paywallet, men værd at
+ *      forsøge når vi ikke har et bedre alternativ.
  */
-async function safeFetchBody(url: string): Promise<string> {
+function pickBestSourceUrl(article: { url: string; openAccess?: any }): string {
+  const oa = article.openAccess;
+  if (oa?.canGenerate && oa?.contentSourceUrl) {
+    return oa.contentSourceUrl;
+  }
+  return article.url;
+}
+
+/**
+ * Henter brødtekst gracefully fra den bedst tilgængelige kilde.
+ * Hvis OA-URL'en findes og er verificeret prioriteres den. Falder
+ * tilbage til original-URL ellers, og til tom streng hvis alt
+ * blokerer — Bonzai bruger så kun titel + (beriget) teaser.
+ */
+async function safeFetchBody(article: { url: string; openAccess?: any }): Promise<{ body: string; sourceUrl: string }> {
+  const primaryUrl = pickBestSourceUrl(article);
+  const sourceType = article.openAccess?.contentSourceType;
+
+  // Hvis genereringsgrundlaget kun er et abstract, ligger teksten allerede
+  // i article.teaser. Vi skal ikke forsøge at hente en paywall/Cloudflare-side
+  // og risikere støj som brødtekst.
+  if (sourceType === 'original_abstract' || sourceType === 'openalex_abstract' || sourceType === 'crossref_abstract') {
+    return { body: '', sourceUrl: article.url };
+  }
+
   try {
-    return await fetchArticleBody(url);
+    const body = await fetchArticleBody(primaryUrl);
+    return { body, sourceUrl: primaryUrl };
   } catch (error) {
-    console.warn(`Kunne ikke hente brødtekst fra ${url}:`, error);
-    return '';
+    console.warn(`Kunne ikke hente brødtekst fra ${primaryUrl}:`, error);
+  }
+
+  // Hvis vi prøvede OA-URL og fejlede, prøv original som fallback
+  if (primaryUrl !== article.url) {
+    try {
+      const body = await fetchArticleBody(article.url);
+      return { body, sourceUrl: article.url };
+    } catch (error) {
+      console.warn(`Fallback til original-URL fejlede også:`, error);
+    }
+  }
+  return { body: '', sourceUrl: primaryUrl };
+}
+
+function describeGenerationSource(article: { url: string; openAccess?: any }, fetchedBodyLength: number): string {
+  const oa = article.openAccess;
+  const host = oa?.contentSourceHost || (oa?.contentSourceUrl ? hostOf(oa.contentSourceUrl) : null);
+  const sourceType = oa?.contentSourceType;
+  const textLength = oa?.contentTextLength || fetchedBodyLength || 0;
+
+  switch (sourceType) {
+    case 'original_fulltext':
+      return `Renset fuldtekstuddrag hentet fra originalkilden${host ? ` (${host})` : ''}. Støj som navigation, metadata, interessekonflikter, funding og størstedelen af referencesektionen er filtreret fra. Hvis artiklen er længere end ca. 10.000 tegn, er uddraget prioriteret ned til ca. 10.000 tegn og kan indeholde få udvalgte referencepunkter, ikke den fulde kildeliste.`;
+    case 'oa_fulltext':
+      return `Renset fuldtekstuddrag hentet fra verificeret Open Access-kilde${host ? ` (${host})` : ''}. Støj som navigation, metadata, interessekonflikter, funding og størstedelen af referencesektionen er filtreret fra. Hvis artiklen er længere end ca. 10.000 tegn, er uddraget prioriteret ned til ca. 10.000 tegn og kan indeholde få udvalgte referencepunkter, ikke den fulde kildeliste.`;
+    case 'original_abstract':
+      return `Kun offentligt abstract fra originalkilden${host ? ` (${host})` : ''} er tilgængeligt (${textLength} tegn). Skriv kun ud fra abstractet.`;
+    case 'openalex_abstract':
+      return `Kun abstract fra OpenAlex-metadata er tilgængeligt (${textLength} tegn). Skriv kun ud fra abstractet.`;
+    case 'crossref_abstract':
+      return `Kun abstract fra Crossref-metadata er tilgængeligt (${textLength} tegn). Skriv kun ud fra abstractet.`;
+    default:
+      return fetchedBodyLength > 0
+        ? 'Fuldtekst hentet fra kilden. Brug denne som primært grundlag.'
+        : 'Der er ikke fundet brugbart tekstgrundlag ud over titel og teaser/abstract. Skriv meget forsigtigt.';
+  }
+}
+
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
   }
 }
 

@@ -2,13 +2,15 @@ import type { Article } from '../types';
 import { patchArticle } from '../api';
 import { addSelected, isSelected } from '../store';
 import { cleanTeaser } from '../utils/text';
-
-const PLACEHOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-  <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9l-6-6z"/>
-  <polyline points="9 3 9 9 15 9"/>
-  <line x1="12" y1="13" x2="12" y2="17"/>
-  <line x1="10" y1="15" x2="14" y2="15"/>
-</svg>`;
+import {
+  brugbarhedScore,
+  brugbarhedBucket,
+  brugbarhedLabel,
+  relevanceLabel,
+  accessBucket,
+  abstractLength,
+  abstractQuality,
+} from '../utils/scoring';
 
 const ARROW_SVG = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
   <path d="M2 10L10 2M5 2h5v5"/>
@@ -25,12 +27,9 @@ export function buildInboxCard(
   card.className = 'article-card';
   card.id = `card-${id}`;
 
-  const hostname = (() => {
-    try { return new URL(article.url).hostname.replace('www.', ''); }
-    catch { return article.url; }
-  })();
-
-  const rankHtml = buildRankBadge(article);
+  const relevanceHtml = buildRelevanceBadge(article);
+  const brugbarhedHtml = buildBrugbarhedBadge(article);
+  const accessInfoHtml = buildAccessInfo(article);
   const summaryHtml = article.relevanceSummary
     ? `<div class="card-summary"><strong>Hvad handler det om:</strong> ${escapeHtml(article.relevanceSummary)}</div>`
     : '';
@@ -38,20 +37,19 @@ export function buildInboxCard(
     ? `<div class="card-angle"><strong>Vinkel:</strong> ${escapeHtml(article.relevanceAngle)}</div>`
     : '';
   const breakdownHtml = buildBreakdown(article);
+  const linksHtml = buildSourceLinks(article);
 
   card.innerHTML = `
     <div class="card-inner">
-      <div class="card-image">${PLACEHOLDER_SVG}</div>
       <div class="card-content">
-        ${rankHtml}
+        <div class="card-badges">${relevanceHtml}${brugbarhedHtml}</div>
         <div class="card-title">${article.title}</div>
         <div class="card-description">${escapeHtml(cleanTeaser(article.teaser))}</div>
         ${summaryHtml}
         ${angleHtml}
+        ${accessInfoHtml}
         ${breakdownHtml}
-        <a href="${article.url}" target="_blank" rel="noopener" class="card-source-link">
-          Læs original på ${hostname} ${ARROW_SVG}
-        </a>
+        ${linksHtml}
       </div>
     </div>
     <div class="card-actions" id="actions-${id}">
@@ -124,19 +122,153 @@ function animateOut(card: HTMLElement, callback: () => void): void {
   setTimeout(callback, 360);
 }
 
-function buildRankBadge(article: Article): string {
+function buildAccessInfo(article: Article): string {
+  const oa = article.openAccess;
+  const sourceHost = oa?.contentSourceHost || hostnameOf(oa?.contentSourceUrl) || hostnameOf(article.url);
+  const sourceType = oa?.contentSourceType;
+
+  if (oa?.canGenerate === false) {
+    return `
+      <div class="access-info access-unusable">
+        <span class="access-info-dot"></span>
+        <div class="access-info-body">
+          <div class="access-info-title">Ingen brugbar adgang</div>
+          <div class="access-info-detail">
+            Vi fandt hverken fuldtekst eller et tilstrækkeligt abstract, som kan bruges sikkert til generering.
+          </div>
+        </div>
+      </div>`;
+  }
+
+  if (accessBucket(article) === 'full') {
+    const len = article.openAccess?.contentTextLength || 0;
+    const isTruncated = len > 10000;
+    const label = sourceType === 'original_fulltext'
+      ? (isTruncated ? 'Uddrag af fuldtekst fra originalkilden' : 'Fuldtekst fra originalkilden')
+      : (isTruncated ? 'Uddrag af fuldtekst fra Open Access-kilde' : 'Fuldtekst fra Open Access-kilde');
+    const detail = isTruncated
+      ? `Artiklen er ca. <strong>${formatNumber(len)} tegn</strong>. Et renset og prioriteret uddrag på ca. <strong>10.000 tegn</strong> bruges til generering${sourceHost ? ` (${escapeHtml(sourceHost)})` : ''}.`
+      : `Hele tekstgrundlaget på ca. <strong>${formatNumber(len)} tegn</strong> bruges til generering${sourceHost ? ` (${escapeHtml(sourceHost)})` : ''}.`;
+    return `
+      <div class="access-info access-full">
+        <span class="access-info-dot"></span>
+        <div class="access-info-body">
+          <div class="access-info-title">${label}</div>
+          <div class="access-info-detail">${detail}</div>
+        </div>
+      </div>`;
+  }
+
+  const len = abstractLength(article);
+  const quality = abstractQuality(len);
+  const sourceLabel = abstractSourceLabel(sourceType);
+
+  let detail: string;
+  switch (quality) {
+    case 'rich':
+      detail = `${sourceLabel} på <strong>${formatNumber(len)} tegn</strong>${sourceHost ? ` (${escapeHtml(sourceHost)})` : ''}. Det er tekstgrundlaget for generering, ikke fuldtekst.`;
+      break;
+    case 'standard':
+      detail = `${sourceLabel} på <strong>${formatNumber(len)} tegn</strong>${sourceHost ? ` (${escapeHtml(sourceHost)})` : ''}. Basis-grundlag, verificer mod originalen.`;
+      break;
+    case 'thin':
+      detail = `${sourceLabel} — kun <strong>${formatNumber(len)} tegn</strong>. Begrænset materiale.`;
+      break;
+    case 'none':
+    default:
+      detail = `Ingen brugbar tekst fundet til generering.`;
+      break;
+  }
+
+  return `
+    <div class="access-info access-abstract">
+      <span class="access-info-dot"></span>
+      <div class="access-info-body">
+        <div class="access-info-title">Abstract tilgængeligt</div>
+        <div class="access-info-detail">${detail}</div>
+      </div>
+    </div>`;
+}
+
+function hostnameOf(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try { return new URL(url).hostname.replace('www.', ''); }
+  catch { return null; }
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('da-DK').format(value);
+}
+
+function buildSourceLinks(article: Article): string {
+  const originalHost = hostnameOf(article.url) || article.url;
+  const oaUrl = article.openAccess?.oaUrl;
+  const oaHost = hostnameOf(oaUrl);
+  const showOa = oaUrl && oaUrl !== article.url && oaHost !== originalHost;
+  const contentUrl = article.openAccess?.contentSourceUrl;
+  const contentSourceIsOriginal = contentUrl === article.url;
+  const contentSourceIsOa = !!oaUrl && contentUrl === oaUrl;
+  const sourceType = article.openAccess?.contentSourceType;
+  const sourceIsFulltext = sourceType === 'original_fulltext' || sourceType === 'oa_fulltext';
+
+  const originalLink = `
+    <a href="${article.url}" target="_blank" rel="noopener" class="card-source-link source-original${contentSourceIsOriginal && sourceIsFulltext ? ' source-used' : ''}">
+      <span class="source-link-label">Original</span>
+      <span class="source-link-host">${escapeHtml(originalHost)}</span>
+      ${contentSourceIsOriginal && sourceIsFulltext ? '<span class="source-link-badge source-link-badge-full">Fuldtekst bruges</span>' : ''}
+      ${ARROW_SVG}
+    </a>`;
+
+  if (!showOa) return `<div class="source-links">${originalLink}</div>`;
+
+  const oaTooltipMarker = article.openAccess?.hasUsableFulltext
+    ? '<span class="source-link-badge source-link-badge-full">Fuldtekst</span>'
+    : '<span class="source-link-badge source-link-badge-oa">Open Access</span>';
+
+  const oaLink = `
+    <a href="${oaUrl}" target="_blank" rel="noopener" class="card-source-link source-oa${contentSourceIsOa ? ' source-used' : ''}">
+      <span class="source-link-label">Open Access</span>
+      <span class="source-link-host">${escapeHtml(oaHost!)}</span>
+      ${contentSourceIsOa ? '<span class="source-link-badge source-link-badge-full">Fuldtekst bruges</span>' : oaTooltipMarker}
+      ${ARROW_SVG}
+    </a>`;
+
+  return `<div class="source-links">${originalLink}${oaLink}</div>`;
+}
+
+function abstractSourceLabel(sourceType: string | null | undefined): string {
+  switch (sourceType) {
+    case 'original_abstract':
+      return 'Abstract fra originalkilden';
+    case 'openalex_abstract':
+      return 'Abstract fra OpenAlex-metadata';
+    case 'crossref_abstract':
+      return 'Abstract fra Crossref-metadata';
+    default:
+      return 'Abstract';
+  }
+}
+
+function buildRelevanceBadge(article: Article): string {
   if (article.relevanceScore == null || article.relevanceBucket == null) {
     return `<div class="rank-badge rank-pending">Ikke rangeret</div>`;
   }
-  const labels: Record<string, string> = {
-    high: 'Høj relevans',
-    medium: 'Medium',
-    low: 'Lav relevans',
-  };
-  const label = labels[article.relevanceBucket] ?? article.relevanceBucket;
+  const label = relevanceLabel(article.relevanceBucket);
   return `
-    <div class="rank-badge rank-${article.relevanceBucket}">
+    <div class="rank-badge rank-relevance rank-${article.relevanceBucket}">
       <span class="rank-score">${article.relevanceScore}</span>
+      <span class="rank-label">${label}</span>
+    </div>`;
+}
+
+function buildBrugbarhedBadge(article: Article): string {
+  if (article.relevanceScore == null) return '';
+  const score = brugbarhedScore(article);
+  const bucket = brugbarhedBucket(score);
+  const label = brugbarhedLabel(bucket);
+  return `
+    <div class="rank-badge rank-brugbarhed rank-${bucket}">
+      <span class="rank-score">${score}</span>
       <span class="rank-label">${label}</span>
     </div>`;
 }

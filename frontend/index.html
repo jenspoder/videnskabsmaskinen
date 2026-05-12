@@ -174,21 +174,6 @@
 
     .card-inner { display: flex; }
 
-    .card-image {
-      width: 160px;
-      min-width: 160px;
-      height: 120px;
-      background-color: rgba(255,255,255,0.03);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      border-right: 1px solid rgba(255,255,255,0.07);
-    }
-    .card-image svg { width: 2rem; height: 2rem; opacity: 0.15; }
-
-    @media (max-width: 600px) { .card-image { display: none; } }
-
     .card-content {
       padding: 1.25rem 1.5rem;
       flex: 1;
@@ -215,19 +200,68 @@
       overflow: hidden;
     }
 
+    .source-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.6rem;
+    }
     .card-source-link {
       font-size: 0.68rem;
       text-transform: uppercase;
-      letter-spacing: 0.15rem;
-      opacity: 0.4;
+      letter-spacing: 0.1rem;
       display: inline-flex;
       align-items: center;
-      gap: 0.3rem;
-      border-bottom: none;
-      transition: opacity 0.2s;
+      gap: 0.45rem;
+      padding: 0.35rem 0.7rem;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 3px;
+      transition: border-color 0.2s, color 0.2s;
+      color: rgba(255,255,255,0.55);
+      text-decoration: none;
     }
-    .card-source-link:hover { opacity: 0.75; border-bottom: none; }
-    .card-source-link svg { width: 0.6rem; height: 0.6rem; }
+    .card-source-link:hover {
+      border-color: rgba(255,255,255,0.3);
+      color: #fff;
+      border-bottom: 1px solid rgba(255,255,255,0.3);
+    }
+    .card-source-link svg { width: 0.6rem; height: 0.6rem; opacity: 0.6; }
+    .source-link-label {
+      font-weight: 600;
+      letter-spacing: 0.12rem;
+      color: rgba(255,255,255,0.4);
+    }
+    .source-link-host {
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.7);
+    }
+    .source-link-badge {
+      font-size: 0.6rem;
+      letter-spacing: 0.05rem;
+      padding: 0.05rem 0.4rem;
+      border-radius: 2px;
+      text-transform: uppercase;
+    }
+    .source-link-badge-full {
+      background-color: var(--accent-dim);
+      color: var(--accent);
+    }
+    .source-link-badge-oa {
+      background-color: rgba(255,255,255,0.07);
+      color: rgba(255,255,255,0.7);
+    }
+    .source-used {
+      border-color: var(--accent);
+      background-color: var(--accent-dim);
+    }
+    .source-used .source-link-label {
+      color: var(--accent);
+    }
+    .source-oa { border-color: rgba(74,222,128,0.25); }
+    .source-oa:hover { border-color: var(--accent); }
+    .source-oa .source-link-label { color: var(--accent); }
 
     .card-actions {
       padding: 0 1.5rem 1.25rem;
@@ -285,6 +319,279 @@
       color: rgba(255,255,255,0.3);
       padding: 0.18rem 0.55rem;
     }
+
+    /* ── FILTER-BAR ── */
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      padding: 0.8rem 0 1.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      margin-bottom: 1.5rem;
+    }
+    .filter-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.85rem;
+      background-color: transparent;
+      border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.5);
+      font-family: inherit;
+      font-size: 0.75rem;
+      letter-spacing: 0.05rem;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    .filter-toggle:hover { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.75); }
+    .filter-toggle.active { color: #fff; border-color: rgba(255,255,255,0.35); background-color: rgba(255,255,255,0.04); }
+    .filter-toggle:not(.active) .filter-dot { opacity: 0.3; }
+    .filter-dot {
+      display: inline-block;
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      transition: opacity 0.18s ease;
+    }
+    .filter-dot.dot-full { background-color: var(--accent); }
+    .filter-dot.dot-abstract { background-color: rgba(255,255,255,0.4); }
+    .filter-dot.dot-unusable { background-color: #f87171; }
+    .filter-count {
+      font-variant-numeric: tabular-nums;
+      color: rgba(255,255,255,0.45);
+      font-size: 0.7rem;
+    }
+    .filter-toggle.active .filter-count { color: rgba(255,255,255,0.7); }
+
+    /* Sort-group skubbes til højre i filter-baren */
+    .sort-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-left: auto;
+    }
+    .sort-group-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12rem;
+      color: rgba(255,255,255,0.4);
+    }
+    .sort-select {
+      background-color: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.78rem;
+      padding: 0.4rem 1.8rem 0.4rem 0.75rem;
+      border-radius: 3px;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23ffffff99' d='M5 6L0 0h10z'/></svg>");
+      background-repeat: no-repeat;
+      background-position: right 0.65rem center;
+      transition: border-color 0.18s ease;
+    }
+    .sort-select:hover { border-color: rgba(255,255,255,0.35); }
+    .sort-select:focus { outline: none; border-color: var(--accent); }
+    .sort-select option { background-color: #1a1a1a; color: #fff; }
+
+    /* ── PAGINATION ── */
+    .pagination {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      align-items: center;
+      padding: 1.5rem 0 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .pagination:empty { display: none; }
+    .pagination-info {
+      font-size: 0.7rem;
+      letter-spacing: 0.1rem;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+    }
+    .pagination-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      align-items: center;
+      justify-content: center;
+    }
+    .page-btn {
+      min-width: 2.2rem;
+      padding: 0.4rem 0.7rem;
+      background-color: transparent;
+      border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.65);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-variant-numeric: tabular-nums;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .page-btn:hover:not(:disabled):not(.active) {
+      border-color: rgba(255,255,255,0.3);
+      color: #fff;
+    }
+    .page-btn.active {
+      background-color: var(--accent);
+      border-color: var(--accent);
+      color: #000;
+      cursor: default;
+    }
+    .page-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .page-nav {
+      letter-spacing: 0.04rem;
+    }
+    .page-ellipsis {
+      padding: 0 0.3rem;
+      color: rgba(255,255,255,0.3);
+      font-size: 0.85rem;
+    }
+
+    /* ── CARD-BADGES + ACCESS-INFO ── */
+    .card-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      align-items: center;
+      margin-bottom: 0.6rem;
+    }
+    .card-badges .rank-badge { margin-bottom: 0; }
+
+    .access-info {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      padding: 0.6rem 0.8rem;
+      margin: 0.8rem 0 0.6rem;
+      background-color: rgba(255,255,255,0.03);
+      border-left: 2px solid rgba(255,255,255,0.15);
+      border-radius: 2px;
+    }
+    .access-info-dot {
+      flex: 0 0 auto;
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      margin-top: 0.45rem;
+    }
+    .access-info-body { flex: 1 1 auto; min-width: 0; }
+    .access-info-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.06rem;
+      text-transform: uppercase;
+      margin-bottom: 0.2rem;
+    }
+    .access-info-detail {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.65);
+      line-height: 1.4;
+    }
+    .access-info-detail .access-host {
+      color: rgba(255,255,255,0.85);
+      font-style: italic;
+    }
+    /* Kun to visuelle tilstande: fuldtekst (grøn) eller abstract (neutral).
+       Brugbarheds-badget bærer kvalitets-signalet via farve. */
+    .access-info.access-full { border-left-color: var(--accent); background-color: var(--accent-dim); }
+    .access-info.access-full .access-info-dot { background-color: var(--accent); }
+    .access-info.access-full .access-info-title { color: var(--accent); }
+
+    .access-info.access-abstract { border-left-color: rgba(255,255,255,0.25); }
+    .access-info.access-abstract .access-info-dot { background-color: rgba(255,255,255,0.4); }
+    .access-info.access-abstract .access-info-title { color: rgba(255,255,255,0.85); }
+
+    .access-info.access-unusable {
+      border-left-color: #f87171;
+      background-color: rgba(248,113,113,0.06);
+    }
+    .access-info.access-unusable .access-info-dot { background-color: #f87171; }
+    .access-info.access-unusable .access-info-title { color: #f87171; }
+
+    /* ── DRAFT QUALITY BANNER ── */
+    .draft-quality-banner {
+      padding: 1rem 1.2rem;
+      margin: 0 0 1.5rem;
+      background-color: rgba(255,255,255,0.03);
+      border-left: 3px solid rgba(255,255,255,0.2);
+      border-radius: 2px;
+    }
+    .draft-quality-header {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin-bottom: 0.5rem;
+    }
+    .draft-quality-dot {
+      width: 0.6rem;
+      height: 0.6rem;
+      border-radius: 50%;
+      background-color: rgba(255,255,255,0.4);
+    }
+    .draft-quality-title {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12rem;
+      font-weight: 600;
+    }
+    .draft-quality-body {
+      font-size: 0.92rem;
+      color: rgba(255,255,255,0.75);
+      line-height: 1.55;
+      margin-bottom: 0.7rem;
+    }
+    .draft-quality-body em {
+      font-style: italic;
+      color: rgba(255,255,255,0.95);
+    }
+    .draft-quality-body strong {
+      font-weight: 600;
+    }
+    .draft-quality-checklist {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .draft-quality-checklist li {
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.7);
+      padding-left: 1.1rem;
+      position: relative;
+    }
+    .draft-quality-checklist li::before {
+      content: '☐';
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: rgba(255,255,255,0.4);
+    }
+
+    /* Kun to visuelle tilstande, samme princip som access-info */
+    .draft-quality-banner.draft-quality-full {
+      background-color: var(--accent-dim);
+      border-left-color: var(--accent);
+    }
+    .draft-quality-full .draft-quality-dot { background-color: var(--accent); }
+    .draft-quality-full .draft-quality-title { color: var(--accent); }
+
+    .draft-quality-banner.draft-quality-abstract {
+      border-left-color: rgba(255,255,255,0.3);
+    }
+    .draft-quality-abstract .draft-quality-dot { background-color: rgba(255,255,255,0.5); }
+    .draft-quality-abstract .draft-quality-title { color: rgba(255,255,255,0.85); }
 
     .card-summary,
     .card-angle {
@@ -548,6 +855,11 @@
     .draft-source-link:hover {
       color: var(--accent);
       border-color: var(--accent);
+    }
+    .draft-oa-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
     }
 
     .demo-tag {
@@ -1053,8 +1365,34 @@
           <button class="btn-crawl" id="btn-crawl">Crawl nu</button>
         </span>
       </div>
+      <div class="filter-bar" id="filter-bar">
+        <button class="filter-toggle active" data-bucket="full">
+          <span class="filter-dot dot-full"></span>
+          <span class="filter-text">Fuldtekst</span>
+          <span class="filter-count" data-count="full">0</span>
+        </button>
+        <button class="filter-toggle active" data-bucket="abstract">
+          <span class="filter-dot dot-abstract"></span>
+          <span class="filter-text">Kun abstract</span>
+          <span class="filter-count" data-count="abstract">0</span>
+        </button>
+        <button class="filter-toggle" id="toggle-unusable" type="button">
+          <span class="filter-dot dot-unusable"></span>
+          <span class="filter-text">Artikler uden adgang</span>
+          <span class="filter-count" data-count="unusable">0</span>
+        </button>
+
+        <div class="sort-group">
+          <label class="sort-group-label" for="sort-select">Sortér efter</label>
+          <select id="sort-select" class="sort-select">
+            <option value="relevance" selected>Indholdsrelevans (højest først)</option>
+            <option value="brugbarhed">Brugbarhed (højest først)</option>
+          </select>
+        </div>
+      </div>
       <div id="inbox-loading" class="loading-pulse">Henter artikler…</div>
       <div class="article-list" id="article-list"></div>
+      <div class="pagination" id="pagination"></div>
       <div id="done-message">
         <div class="done-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

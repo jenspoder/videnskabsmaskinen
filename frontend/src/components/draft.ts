@@ -3,6 +3,8 @@ import { saveDraft, getDraft } from '../store';
 import { generateMockDraft } from '../mockGenerate';
 import { generateDraft as generateDraftViaApi } from '../api';
 import type { GenerateDraftJob } from '../api';
+import { accessBucket } from '../utils/scoring';
+import type { Article } from '../types';
 
 export interface DraftViewCallbacks {
   onBack: () => void;
@@ -114,7 +116,7 @@ function showLoader(body: HTMLElement): LoaderHandle {
       </div>
       <ul class="loader-steps">
         <li class="loader-step done"   data-loader-step="fetching">Henter kildens brødtekst</li>
-        <li class="loader-step active" data-loader-step="generating">Bonzai genererer artikel</li>
+        <li class="loader-step active" data-loader-step="generating">Genererer artikel</li>
         <li class="loader-step"        data-loader-step="rendering">Renderer udkast</li>
       </ul>
     </div>
@@ -195,6 +197,7 @@ export function renderDraftView(
           </a>
         </span>
       </div>
+      ${buildOaSourceRow(article)}
       <div class="draft-meta-row">
         <span class="draft-meta-label">Vinkel</span>
         <span class="draft-meta-value">${angle ? escape(angle) : '<em>Ingen vinkel angivet</em>'}</span>
@@ -206,6 +209,8 @@ export function renderDraftView(
         </span>
       </div>
     </div>
+
+    ${buildQualityBanner(article)}
 
     <article class="draft-body" id="draft-body"></article>
   `;
@@ -298,4 +303,92 @@ function escape(text: string): string {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function buildQualityBanner(article: Article): string {
+  const oa = article.openAccess;
+  const abstractLen = (article.teaser || '').replace(/\s+/g, ' ').trim().length;
+  const host = oa?.oaUrl ? hostnameOf(oa.oaUrl) : null;
+
+  let variant: string;
+  let title: string;
+  let body: string;
+  let checklist: string[];
+
+  if (accessBucket(article) === 'full') {
+    variant = 'full';
+    title = 'Fuldtekst tilgængelig';
+    body = `Udkastet er genereret på grundlag af hele artiklen${host ? ` (Open Access-version på <em>${escape(host)}</em>)` : ''}.`;
+    checklist = [
+      'Verificer at citater og tal stemmer med originalen',
+      'Tjek at vinklen ikke fordrejer studiets konklusion',
+    ];
+  } else if (abstractLen >= 1500) {
+    variant = 'abstract';
+    title = `Grundigt abstract — ${abstractLen} tegn`;
+    body = `Fuldteksten er ikke tilgængelig, men abstractet er grundigt. Udkastet er bygget på abstractet alene og bør have rimelig substans.`;
+    checklist = [
+      'Verificer at citater og specifikke tal står direkte i abstractet',
+      'Undgå formuleringer der antyder kendskab til metoden ud over hvad abstractet siger',
+      'Overvej manuelt at hente kilden for ekstra kontekst før udgivelse',
+    ];
+  } else if (abstractLen >= 600) {
+    variant = 'abstract';
+    title = `Standard abstract — ${abstractLen} tegn`;
+    body = `Udkastet er bygget på abstractet alene. Det giver et basis-grundlag, men teksten vil mangle nuancer fra metoden og diskussionen.`;
+    checklist = [
+      'Verificer alle konkrete påstande mod originalen',
+      'Undgå citat-formuleringer der ikke står direkte i abstractet',
+      'Overvej om artiklen bærer nok substans alene — ellers find supplerende kilder',
+    ];
+  } else {
+    variant = 'abstract';
+    title = `Kort abstract — kun ${abstractLen} tegn`;
+    body = `Materialet er begrænset. Udkastet bør behandles som et udgangspunkt, ikke en færdig tekst.`;
+    checklist = [
+      'Vær særligt skeptisk — udkastet er bygget på sparsomt materiale',
+      'Find originalen manuelt og bekræft alle påstande før udgivelse',
+      'Overvej om artiklen overhovedet bør genereres uden bedre kildemateriale',
+    ];
+  }
+
+  const items = checklist.map((c) => `<li>${escape(c)}</li>`).join('');
+
+  return `
+    <div class="draft-quality-banner draft-quality-${variant}">
+      <div class="draft-quality-header">
+        <span class="draft-quality-dot"></span>
+        <span class="draft-quality-title">${escape(title)}</span>
+      </div>
+      <div class="draft-quality-body">${body}</div>
+      <ul class="draft-quality-checklist">${items}</ul>
+    </div>`;
+}
+
+function hostnameOf(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try { return new URL(url).hostname.replace('www.', ''); }
+  catch { return null; }
+}
+
+function buildOaSourceRow(article: Article): string {
+  const oaUrl = article.openAccess?.oaUrl;
+  if (!oaUrl || oaUrl === article.url) return '';
+  const oaHost = hostnameOf(oaUrl);
+  const originalHost = hostnameOf(article.url);
+  if (!oaHost || oaHost === originalHost) return '';
+
+  const badge = article.openAccess?.hasUsableFulltext
+    ? '<span class="source-link-badge source-link-badge-full">Fuldtekst</span>'
+    : '<span class="source-link-badge source-link-badge-oa">Open Access</span>';
+
+  return `
+    <div class="draft-meta-row">
+      <span class="draft-meta-label">Open Access</span>
+      <span class="draft-meta-value">
+        <a href="${escape(oaUrl)}" target="_blank" rel="noopener" class="draft-source-link draft-oa-link">
+          ${escape(oaHost)} ${badge}
+        </a>
+      </span>
+    </div>`;
 }

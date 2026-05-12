@@ -39,6 +39,35 @@ export interface RelevanceBreakdown {
   kildernes_trovaerdighed: number;
 }
 
+export type OaStatus = 'gold' | 'green' | 'hybrid' | 'bronze' | 'closed' | 'unknown';
+export type ContentSourceType =
+  | 'original_fulltext'
+  | 'oa_fulltext'
+  | 'original_abstract'
+  | 'openalex_abstract'
+  | 'crossref_abstract'
+  | 'none';
+
+export interface OpenAccessInfo {
+  checked: boolean;
+  checkedAt: string | null;
+  doi: string | null;
+  inOpenAlex: boolean;
+  isOa: boolean;
+  oaStatus: OaStatus | null;
+  license: string | null;
+  oaUrl: string | null;
+  hasUsableFulltext: boolean;
+  hasOpenAlexAbstract?: boolean;
+  hasPublisherAbstract?: boolean;
+  openalexType?: string | null;
+  contentSourceType?: ContentSourceType;
+  contentSourceUrl?: string | null;
+  contentSourceHost?: string | null;
+  contentTextLength?: number;
+  canGenerate?: boolean;
+}
+
 export interface Article {
   id: string;
   customerId: string;
@@ -58,6 +87,7 @@ export interface Article {
   relevanceSummary: string | null;
   relevanceAngle: string | null;
   rankedAt: string | null;
+  openAccess?: OpenAccessInfo | null;
 }
 
 export interface CrawlResult {

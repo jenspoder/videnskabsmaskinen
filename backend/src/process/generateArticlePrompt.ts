@@ -99,6 +99,7 @@ export interface GenerateUserMessageInput {
   teaser: string;
   url: string;
   angle: string;
+  sourceDescription?: string;
   /**
    * Brødtekst hentet fra kildens URL af fetchArticleBody. Tom streng
    * hvis sitet blokerede (fx 403 fra ScienceDirect). I så fald falder
@@ -112,9 +113,14 @@ export function buildGenerateUserMessage(input: GenerateUserMessageInput): strin
     ? input.angle.trim()
     : 'Ingen specifik vinkel angivet. Vælg selv den vinkel, der bedst formidler kildens centrale pointe.';
 
+  const sourceDescription = input.sourceDescription?.trim()
+    || (input.body.trim()
+      ? 'Fuldtekst fra den bedst tilgængelige kilde.'
+      : 'Kun titel og teaser/abstract er tilgængeligt.');
+
   const bodySection = input.body.trim()
-    ? `\nBRØDTEKST FRA KILDEARTIKLEN\n${input.body.trim()}\n`
-    : '\nBRØDTEKST FRA KILDEARTIKLEN\n(kunne ikke hentes — kildens website blokerede crawling. Skriv kun ud fra titel og teaser, og vær ekstra forsigtig med ikke at finde på detaljer.)\n';
+    ? `\nTEKSTGRUNDLAG FOR GENERERING\n${sourceDescription}\n\n${input.body.trim()}\n`
+    : `\nTEKSTGRUNDLAG FOR GENERERING\n${sourceDescription}\n\nBrug kun titel og teaser/abstract. Vær ekstra forsigtig med ikke at finde på detaljer, metodeafsnit, tal eller konklusioner der ikke fremgår af tekstgrundlaget.\n`;
 
   return `Skriv én færdig populærvidenskabelig artikel baseret på følgende kilde og redaktionelle vinkel.
 
