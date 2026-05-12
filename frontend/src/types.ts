@@ -56,6 +56,8 @@ export interface Article {
   relevanceBreakdown: RelevanceBreakdown | null;
   relevanceSummary: string | null;
   relevanceAngle: string | null;
+  suggestedTitle?: string | null;
+  suggestedExcerpt?: string | null;
   rankedAt: string | null;
   openAccess?: OpenAccessInfo | null;
 }

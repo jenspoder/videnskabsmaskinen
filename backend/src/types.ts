@@ -86,6 +86,8 @@ export interface Article {
   relevanceBreakdown: RelevanceBreakdown | null;
   relevanceSummary: string | null;
   relevanceAngle: string | null;
+  suggestedTitle?: string | null;
+  suggestedExcerpt?: string | null;
   rankedAt: string | null;
   openAccess?: OpenAccessInfo | null;
 }
@@ -93,6 +95,8 @@ export interface Article {
 export interface CrawlResult {
   ok: boolean;
   added: number;
+  refreshed?: number;
+  removed?: number;
   errors: Array<{ sourceId: string; message: string }>;
   updatedAt: string;
 }

@@ -1,7 +1,7 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import * as crypto from 'crypto';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
-import { loadJsonOrDefault, saveJson, saveArticle, loadArticle, listArticlesInFolder, moveArticle, SOURCES_KEY } from './s3Store';
+import { loadJsonOrDefault, saveJson, saveArticle, deleteArticle, loadArticle, listArticlesInFolder, moveArticle, SOURCES_KEY } from './s3Store';
 import { crawlOneSource } from './crawler/crawlOneSource';
 import { crawlRssSource } from './crawler/crawlRssSource';
 import { generateArticle } from './process/bonzai';
@@ -23,7 +23,7 @@ interface GenerateJobEvent {
 interface GenerateJobState {
   jobId: string;
   articleId: string;
-  status: 'pending' | 'completed' | 'failed';
+  status: 'pending' | 'completed' | 'failed' | 'canceled';
   title?: string;
   sourceUrl?: string;
   angle?: string;
@@ -77,6 +77,8 @@ export async function handler(event: any): Promise<any> {
 
     const jobIdMatch = path.match(/^\/jobs\/([^/]+)$/);
     if (method === 'GET' && jobIdMatch) return handleGetJob(jobIdMatch[1]);
+    const cancelJobMatch = path.match(/^\/jobs\/([^/]+)\/cancel$/);
+    if (method === 'POST' && cancelJobMatch) return handleCancelJob(cancelJobMatch[1]);
 
     const articleIdMatch = path.match(/^\/articles\/([^/]+)(\/.*)?$/);
     const id = articleIdMatch?.[1] ?? '';
@@ -144,6 +146,8 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2, id: string): 
     teaser: article.teaser,
     url: sourceUrl,
     angle,
+    suggestedTitle: article.suggestedTitle,
+    suggestedExcerpt: article.suggestedExcerpt,
     sourceDescription: describeGenerationSource(article, articleBody.length),
     body: articleBody,
   });
@@ -221,6 +225,21 @@ async function handleGetJob(jobId: string): Promise<APIGatewayProxyResultV2> {
   return json(200, job);
 }
 
+async function handleCancelJob(jobId: string): Promise<APIGatewayProxyResultV2> {
+  const job = await loadJsonOrDefault<GenerateJobState | null>(jobKey(jobId), null);
+  if (!job) return json(404, { error: 'Job ikke fundet' });
+  if (job.status === 'completed') return json(409, { error: 'Jobbet er allerede færdigt' });
+
+  const canceled: GenerateJobState = {
+    ...job,
+    status: 'canceled',
+    error: 'Generering stoppet af redaktør',
+    finishedAt: new Date().toISOString(),
+  };
+  await saveJson(jobKey(jobId), canceled);
+  return json(200, canceled);
+}
+
 async function runGenerateDraftJob(payload: GenerateJobEvent): Promise<void> {
   const { jobId, articleId, angle } = payload;
   const baseState = (await loadJsonOrDefault<GenerateJobState | null>(jobKey(jobId), null)) ?? {
@@ -243,15 +262,23 @@ async function runGenerateDraftJob(payload: GenerateJobEvent): Promise<void> {
   }
 
   try {
+    const currentState = await loadJsonOrDefault<GenerateJobState | null>(jobKey(jobId), null);
+    if (currentState?.status === 'canceled') return;
+
     const { body: articleBody, sourceUrl } = await safeFetchBody(article);
     const html = await generateArticle({
       title: article.title,
       teaser: article.teaser,
       url: sourceUrl,
       angle,
+      suggestedTitle: article.suggestedTitle,
+      suggestedExcerpt: article.suggestedExcerpt,
       sourceDescription: describeGenerationSource(article, articleBody.length),
       body: articleBody,
     });
+
+    const stateBeforeSave = await loadJsonOrDefault<GenerateJobState | null>(jobKey(jobId), null);
+    if (stateBeforeSave?.status === 'canceled') return;
 
     await saveJson(jobKey(jobId), {
       ...baseState,
@@ -372,8 +399,8 @@ async function handleRankInbox(event: APIGatewayProxyEventV2): Promise<APIGatewa
   const force = event.queryStringParameters?.force === 'true';
   const articles = await listArticlesInFolder('inbox');
   const targets = force
-    ? articles
-    : articles.filter((a) => a.relevanceScore === null || !a.relevanceBreakdown);
+    ? articles.filter(canRankArticle)
+    : articles.filter((a) => canRankArticle(a) && (a.relevanceScore === null || !a.relevanceBreakdown));
 
   let ranked = 0;
   const errors: Array<{ id: string; message: string }> = [];
@@ -393,6 +420,12 @@ async function handleRankInbox(event: APIGatewayProxyEventV2): Promise<APIGatewa
   return json(200, { ok: true, ranked, skipped: articles.length - targets.length, errors });
 }
 
+function canRankArticle(article: Article): boolean {
+  const oa = article.openAccess;
+  if (!oa) return true;
+  return oa.canGenerate !== false && oa.contentSourceType !== 'none';
+}
+
 async function rankAndPersist(article: Article): Promise<Article> {
   const result = await rankArticle(article);
   const { relevanceRationale: _ignored, ...rest } = article as any;
@@ -403,6 +436,8 @@ async function rankAndPersist(article: Article): Promise<Article> {
     relevanceBreakdown: result.breakdown,
     relevanceSummary: result.summary,
     relevanceAngle: result.angle,
+    suggestedTitle: result.suggestedTitle,
+    suggestedExcerpt: result.suggestedExcerpt,
     rankedAt: new Date().toISOString(),
   };
   await saveArticle(updated);
@@ -424,28 +459,49 @@ async function runCrawl(): Promise<CrawlResult> {
   const enabledSources = sourcesStore.sources.filter((s) => s.enabled);
   const errors: CrawlResult['errors'] = [];
   let addedCount = 0;
+  let refreshedCount = 0;
+  let removedCount = 0;
   const now = new Date().toISOString();
 
-  // Byg et set af kendte IDs fra begge mapper til deduplication
+  // Reviewed artikler må ikke dukke op i inbox igen, men inbox-artikler skal
+  // opdateres/prunes efter den aktuelle RSS-liste, så gamle demo-data ikke
+  // bliver liggende for evigt.
   const [inboxArticles, reviewedArticles] = await Promise.all([
     listArticlesInFolder('inbox'),
     listArticlesInFolder('reviewed'),
   ]);
-  const knownIds = new Set([
-    ...inboxArticles.map((a) => a.id),
-    ...reviewedArticles.map((a) => a.id),
-  ]);
+  const inboxById = new Map(inboxArticles.map((a) => [a.id, a]));
+  const reviewedIds = new Set(reviewedArticles.map((a) => a.id));
+  const freshInboxIds = new Set<string>();
+  const successfulSourceIds = new Set<string>();
+  const enabledSourceIds = new Set(enabledSources.map((s) => s.sourceId));
 
   for (const source of enabledSources) {
     try {
       const crawled = source.type === 'rss'
         ? await crawlRssSource(source)
         : await crawlOneSource(source);
+      successfulSourceIds.add(source.sourceId);
+
       for (const item of crawled) {
         const id = crypto.createHash('sha1').update(item.url).digest('hex');
-        if (!knownIds.has(id)) {
+        if (reviewedIds.has(id)) continue;
+
+        freshInboxIds.add(id);
+        const existing = inboxById.get(id);
+        if (existing) {
+          await saveArticle({
+            ...existing,
+            customerId: item.customerId,
+            sourceId: item.sourceId,
+            title: item.title,
+            url: item.url,
+            teaser: item.teaser,
+            status: 'new',
+          });
+          refreshedCount++;
+        } else {
           await saveArticle({ ...item, id, discoveredAt: now, status: 'new' });
-          knownIds.add(id);
           addedCount++;
         }
       }
@@ -457,5 +513,23 @@ async function runCrawl(): Promise<CrawlResult> {
     }
   }
 
-  return { ok: true, added: addedCount, errors, updatedAt: now };
+  for (const article of inboxArticles) {
+    if (
+      enabledSourceIds.has(article.sourceId) &&
+      successfulSourceIds.has(article.sourceId) &&
+      !freshInboxIds.has(article.id)
+    ) {
+      await deleteArticle('inbox', article.id);
+      removedCount++;
+    }
+  }
+
+  return {
+    ok: true,
+    added: addedCount,
+    refreshed: refreshedCount,
+    removed: removedCount,
+    errors,
+    updatedAt: now,
+  };
 }

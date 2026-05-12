@@ -1,6 +1,6 @@
 import type { Article } from '../types';
 import { patchArticle } from '../api';
-import { addSelected, isSelected } from '../store';
+import { isSelected } from '../store';
 import { cleanTeaser } from '../utils/text';
 import {
   brugbarhedScore,
@@ -20,40 +20,42 @@ export function buildInboxCard(
   article: Article,
   onRemoved: () => void,
   getOpenId: () => string | null,
-  setOpenId: (id: string | null) => void
+  setOpenId: (id: string | null) => void,
+  onGenerate: (article: Article, angle: string) => void
 ): HTMLElement {
   const id = article.id;
   const card = document.createElement('div');
   card.className = 'article-card';
   card.id = `card-${id}`;
 
-  const relevanceHtml = buildRelevanceBadge(article);
-  const brugbarhedHtml = buildBrugbarhedBadge(article);
+  const ratingHtml = buildRatingSummary(article);
   const accessInfoHtml = buildAccessInfo(article);
-  const summaryHtml = article.relevanceSummary
-    ? `<div class="card-summary"><strong>Hvad handler det om:</strong> ${escapeHtml(article.relevanceSummary)}</div>`
+  const suggestedArticleHtml = buildSuggestedArticle(article);
+  const summary = article.relevanceSummary?.trim() || '';
+  const showSummary = summary && !suggestedArticleHtml;
+  const summaryHtml = showSummary
+    ? `<div class="card-summary"><strong>Hvad handler det om:</strong> ${escapeHtml(summary)}</div>`
     : '';
   const angleHtml = article.relevanceAngle
-    ? `<div class="card-angle"><strong>Vinkel:</strong> ${escapeHtml(article.relevanceAngle)}</div>`
+    ? `<div class="card-angle"><strong>Foreslået vinkel:</strong> ${escapeHtml(article.relevanceAngle)}</div>`
     : '';
   const breakdownHtml = buildBreakdown(article);
   const linksHtml = buildSourceLinks(article);
+  const sourceSectionHtml = buildCardSection('Kilde og adgang', `${accessInfoHtml}${linksHtml}`);
+  const scoreSectionHtml = buildCardSection('Redaktionel vurdering', `${ratingHtml}${breakdownHtml}`);
 
   card.innerHTML = `
     <div class="card-inner">
       <div class="card-content">
-        <div class="card-badges">${relevanceHtml}${brugbarhedHtml}</div>
-        <div class="card-title">${article.title}</div>
-        <div class="card-description">${escapeHtml(cleanTeaser(article.teaser))}</div>
+        ${suggestedArticleHtml}
         ${summaryHtml}
         ${angleHtml}
-        ${accessInfoHtml}
-        ${breakdownHtml}
-        ${linksHtml}
+        ${sourceSectionHtml}
+        ${scoreSectionHtml}
       </div>
     </div>
     <div class="card-actions" id="actions-${id}">
-      <button class="btn-keep" id="btn-keep-${id}">Behold</button>
+      <button class="btn-keep" id="btn-keep-${id}">Generer artikel</button>
       <button class="btn-ignore" id="btn-ignore-${id}">Ignorer</button>
     </div>
     <div class="angle-zone" id="angle-${id}">
@@ -61,10 +63,10 @@ export function buildInboxCard(
         <div class="angle-wrapper">
           <label for="angle-input-${id}">Din vinkel</label>
           <textarea class="angle-input" id="angle-input-${id}" rows="4"
-            placeholder="Hvad er vinklen på denne artikel?"></textarea>
+            placeholder="Hvad er vinklen på denne artikel?">${escapeHtml(article.relevanceAngle || '')}</textarea>
         </div>
         <div class="angle-buttons">
-          <button class="btn-send" id="btn-send-${id}">Føj til behandling</button>
+          <button class="btn-send" id="btn-send-${id}">Start generering</button>
           <button class="btn-cancel" id="btn-cancel-${id}">Annuller</button>
         </div>
       </div>
@@ -110,11 +112,40 @@ export function buildInboxCard(
       animateOut(card, () => onRemoved());
       return;
     }
-    addSelected(article, angle);
+    onGenerate(article, angle);
     animateOut(card, () => onRemoved());
   });
 
   return card;
+}
+
+function buildRatingSummary(article: Article): string {
+  const relevanceHtml = buildRelevanceBadge(article);
+  const brugbarhedHtml = buildBrugbarhedBadge(article);
+  if (!relevanceHtml && !brugbarhedHtml) return '';
+  return `<div class="card-badges card-rating-summary">${relevanceHtml}${brugbarhedHtml}</div>`;
+}
+
+function buildCardSection(label: string, content: string): string {
+  if (!content.trim()) return '';
+  return `
+    <div class="card-section">
+      <div class="card-section-label">${escapeHtml(label)}</div>
+      <div class="card-section-content">${content}</div>
+    </div>`;
+}
+
+function buildSuggestedArticle(article: Article): string {
+  const title = article.suggestedTitle?.trim();
+  const excerpt = article.suggestedExcerpt?.trim();
+  if (!title && !excerpt) return '';
+
+  return `
+    <div class="card-suggestion">
+      <div class="card-suggestion-label">Artikelidé</div>
+      ${title ? `<div class="card-suggestion-title">${escapeHtml(title)}</div>` : ''}
+      ${excerpt ? `<div class="card-suggestion-excerpt">${escapeHtml(excerpt)}</div>` : ''}
+    </div>`;
 }
 
 function animateOut(card: HTMLElement, callback: () => void): void {

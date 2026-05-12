@@ -1,12 +1,12 @@
 import type { Article } from './types';
-import { listArticles, triggerCrawl } from './api';
+import { cancelDraftJob, getDraftJob, listArticles, startGenerateDraft, triggerCrawl } from './api';
 import { buildInboxCard } from './components/inbox';
 import { buildArchiveCard } from './components/archive';
 import { buildSelectedCard } from './components/selected';
 import { renderDraftView } from './components/draft';
-import { mockRankArticle } from './mockRank';
-import { getSelected, isSelected } from './store';
+import { addSelected, getDraft, getSelected, isSelected, saveDraft, setGenerationState } from './store';
 import { accessBucket, brugbarhedScore, isGeneratable, type AccessBucket } from './utils/scoring';
+import { generateMockDraft } from './mockGenerate';
 
 let inboxArticles: Article[] = [];
 let openAngleId: string | null = null;
@@ -14,6 +14,9 @@ const activeBuckets: Set<AccessBucket> = new Set(['full', 'abstract']);
 type SortMode = 'relevance' | 'brugbarhed';
 let sortMode: SortMode = 'relevance';
 let showUnusable = false;
+const USE_BACKEND_GENERATION = import.meta.env.VITE_USE_BACKEND_GENERATION === 'true';
+const activeGenerationPolls = new Set<string>();
+let queueRunning = false;
 
 const PAGE_SIZE = 25;
 let currentPage = 1;
@@ -84,8 +87,6 @@ async function renderInbox(): Promise<void> {
 
   inboxLoading.style.display = 'none';
 
-  applyMockRankToUnranked(inboxArticles);
-
   if (inboxArticles.length === 0) {
     doneMessage.classList.add('visible');
     renderPagination(0);
@@ -151,11 +152,24 @@ function renderSelected(): void {
     return;
   }
 
+  resumeGenerationJobs(items);
+
   for (const sel of items) {
     selectedList.appendChild(
       buildSelectedCard(
         sel,
-        (id) => openDraft(id),
+        (id) => {
+          const selected = getSelected().find((item) => item.article.id === id);
+          if (!selected) return;
+          if (getDraft(id)) {
+            openDraft(id);
+            return;
+          }
+          startDraftGeneration(selected.article, selected.angle);
+        },
+        (id) => {
+          cancelGeneration(id);
+        },
         () => {
           renderSelected();
           refreshBadges();
@@ -165,6 +179,163 @@ function renderSelected(): void {
   }
 
   refreshBadges();
+}
+
+async function cancelGeneration(articleId: string): Promise<void> {
+  const selected = getSelected().find((item) => item.article.id === articleId);
+  const jobId = selected?.generation?.jobId;
+
+  setGenerationState(articleId, {
+    ...(selected?.generation ?? {}),
+    status: 'canceled',
+    error: 'Generering stoppet af redaktør',
+  });
+  activeGenerationPolls.delete(articleId);
+  queueRunning = false;
+  refreshSelectedView();
+  processGenerationQueue();
+
+  if (jobId && USE_BACKEND_GENERATION) {
+    try {
+      await cancelDraftJob(jobId);
+    } catch (error) {
+      console.warn('Kunne ikke stoppe backend-job:', error);
+    }
+  }
+}
+
+function refreshSelectedView(): void {
+  if (document.getElementById('view-til-behandling')?.classList.contains('active')) {
+    renderSelected();
+  }
+  refreshBadges();
+}
+
+async function startDraftGeneration(article: Article, angle: string): Promise<void> {
+  const finalAngle = angle.trim() || article.relevanceAngle || '';
+  addSelected(article, finalAngle);
+  setGenerationState(article.id, { status: 'queued' });
+  showView('til-behandling');
+  processGenerationQueue();
+}
+
+async function processGenerationQueue(): Promise<void> {
+  if (queueRunning) return;
+  const selected = getSelected();
+  const hasActive = selected.some((item) =>
+    item.generation?.status === 'generating' && !getDraft(item.article.id)
+  );
+  if (hasActive) return;
+
+  const next = selected
+    .slice()
+    .reverse()
+    .find((item) => item.generation?.status === 'queued' && !getDraft(item.article.id));
+  if (!next) return;
+
+  queueRunning = true;
+  if (!USE_BACKEND_GENERATION) {
+    setGenerationState(next.article.id, { status: 'generating', startedAt: new Date().toISOString() });
+    refreshSelectedView();
+    window.setTimeout(() => {
+      saveDraft(next.article.id, generateMockDraft(next.article, next.angle));
+      queueRunning = false;
+      refreshSelectedView();
+      processGenerationQueue();
+    }, 1200);
+    return;
+  }
+
+  try {
+    const { jobId } = await startGenerateDraft(next.article.id, next.angle);
+    setGenerationState(next.article.id, {
+      status: 'generating',
+      jobId,
+      startedAt: new Date().toISOString(),
+    });
+    refreshSelectedView();
+    pollGenerationJob(next.article.id, jobId);
+  } catch (error) {
+    setGenerationState(next.article.id, {
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'Kunne ikke starte generering',
+    });
+    queueRunning = false;
+    refreshSelectedView();
+    processGenerationQueue();
+  }
+}
+
+function resumeGenerationJobs(items = getSelected()): void {
+  for (const item of items) {
+    const generation = item.generation;
+    if (!generation?.jobId || generation.status !== 'generating' || getDraft(item.article.id)) continue;
+    pollGenerationJob(item.article.id, generation.jobId);
+  }
+  processGenerationQueue();
+}
+
+function pollGenerationJob(articleId: string, jobId: string): void {
+  if (activeGenerationPolls.has(articleId)) return;
+  activeGenerationPolls.add(articleId);
+
+  const poll = async (): Promise<void> => {
+    try {
+      const selected = getSelected().find((item) => item.article.id === articleId);
+      if (selected?.generation?.status === 'canceled') {
+        activeGenerationPolls.delete(articleId);
+        queueRunning = false;
+        processGenerationQueue();
+        return;
+      }
+      const job = await getDraftJob(jobId);
+      if (job.status === 'completed' && job.html) {
+        saveDraft(articleId, job.html);
+        activeGenerationPolls.delete(articleId);
+        queueRunning = false;
+        refreshSelectedView();
+        processGenerationQueue();
+        return;
+      }
+      if (job.status === 'failed') {
+        setGenerationState(articleId, {
+          status: 'failed',
+          jobId,
+          error: job.error || 'Generering fejlede',
+        });
+        activeGenerationPolls.delete(articleId);
+        queueRunning = false;
+        refreshSelectedView();
+        processGenerationQueue();
+        return;
+      }
+      if (job.status === 'canceled') {
+        setGenerationState(articleId, {
+          status: 'canceled',
+          jobId,
+          error: job.error || 'Generering stoppet',
+        });
+        activeGenerationPolls.delete(articleId);
+        queueRunning = false;
+        refreshSelectedView();
+        processGenerationQueue();
+        return;
+      }
+      window.setTimeout(poll, 2500);
+    } catch (error) {
+      setGenerationState(articleId, {
+        status: 'failed',
+        jobId,
+        error: error instanceof Error ? error.message : 'Kunne ikke hente job-status',
+      });
+      activeGenerationPolls.delete(articleId);
+      queueRunning = false;
+      refreshSelectedView();
+      processGenerationQueue();
+    }
+  };
+
+  window.setTimeout(poll, 1200);
 }
 
 function openDraft(id: string): void {
@@ -194,39 +365,6 @@ async function handleCrawl(btn: HTMLButtonElement): Promise<void> {
   } finally {
     btn.textContent = 'Crawl nu';
     btn.disabled = false;
-  }
-}
-
-// ── Ranger-knap (frontend-demo, ingen API) ───────────────────────────────────
-// Når Bonzai er sat op i Lambda, kan dette skiftes til rankInbox() fra api.ts.
-async function handleRank(btn: HTMLButtonElement): Promise<void> {
-  const original = btn.textContent;
-  btn.textContent = 'Rangerer…';
-  btn.disabled = true;
-  try {
-    for (const article of inboxArticles) {
-      const result = mockRankArticle(article);
-      article.relevanceScore = result.score;
-      article.relevanceBucket = result.bucket;
-      article.relevanceAngle = result.angle;
-      article.rankedAt = new Date().toISOString();
-    }
-    renderInboxFromState();
-  } finally {
-    btn.textContent = original;
-    btn.disabled = false;
-  }
-}
-
-function applyMockRankToUnranked(articles: Article[]): void {
-  for (const article of articles) {
-    if (article.relevanceScore == null) {
-      const result = mockRankArticle(article);
-      article.relevanceScore = result.score;
-      article.relevanceBucket = result.bucket;
-      article.relevanceAngle = result.angle;
-      article.rankedAt = new Date().toISOString();
-    }
   }
 }
 
@@ -260,7 +398,10 @@ function renderInboxFromState(): void {
         }
       },
       () => openAngleId,
-      (id) => { openAngleId = id; }
+      (id) => { openAngleId = id; },
+      (article, angle) => {
+        startDraftGeneration(article, angle);
+      }
     );
     articleList.appendChild(card);
   }
@@ -346,10 +487,6 @@ function compareArticles(a: Article, b: Article): number {
 
 document.getElementById('btn-crawl')?.addEventListener('click', (e) => {
   handleCrawl(e.currentTarget as HTMLButtonElement);
-});
-
-document.getElementById('btn-rank')?.addEventListener('click', (e) => {
-  handleRank(e.currentTarget as HTMLButtonElement);
 });
 
 document.querySelectorAll<HTMLButtonElement>('.filter-toggle').forEach((btn) => {

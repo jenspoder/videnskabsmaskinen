@@ -46,6 +46,12 @@ export async function saveArticle(article: Article): Promise<void> {
   await saveJson(articleKey(folder, article.id), article);
 }
 
+export async function deleteArticle(folder: 'inbox' | 'reviewed', id: string): Promise<void> {
+  await s3Client.send(
+    new DeleteObjectCommand({ Bucket: BUCKET, Key: articleKey(folder, id) })
+  );
+}
+
 export async function loadArticle(
   id: string,
   folder: 'inbox' | 'reviewed'

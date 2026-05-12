@@ -8,6 +8,7 @@ const ARROW_SVG = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" st
 export function buildSelectedCard(
   selected: SelectedArticle,
   onGenerate: (id: string) => void,
+  onCancelGeneration: (id: string) => void,
   onChange: () => void
 ): HTMLElement {
   const { article } = selected;
@@ -25,23 +26,53 @@ export function buildSelectedCard(
 
   function render(state: SelectedArticle): void {
     const draft = getDraft(state.article.id);
+    const generation = state.generation;
+    const ideaTitle = state.article.suggestedTitle?.trim() || state.article.title;
+    const ideaExcerpt = state.article.suggestedExcerpt?.trim();
+    const isQueued = !draft && generation?.status === 'queued';
+    const isGenerating = !draft && generation?.status === 'generating';
+    const isFailed = !draft && generation?.status === 'failed';
+    const isCanceled = !draft && generation?.status === 'canceled';
     const draftBadge = draft
       ? `<span class="draft-badge has-draft">Udkast klar</span>`
-      : `<span class="draft-badge">Intet udkast</span>`;
-    const generateLabel = draft ? 'Åbn udkast' : 'Generer udkast';
+      : isQueued
+        ? `<span class="draft-badge is-queued">I kø</span>`
+        : isGenerating
+        ? `<span class="draft-badge is-generating">Genererer…</span>`
+        : isFailed
+          ? `<span class="draft-badge is-failed">Fejlet</span>`
+          : isCanceled
+            ? `<span class="draft-badge is-queued">Stoppet</span>`
+          : `<span class="draft-badge">Afventer</span>`;
+    const generateLabel = draft ? 'Åbn udkast' : (isFailed || isCanceled) ? 'Prøv igen' : isQueued ? 'I kø' : 'Genererer…';
+    const disabled = isQueued || isGenerating ? ' disabled' : '';
 
     card.innerHTML = `
       <div class="selected-head">
         <div class="selected-title-block">
           <a href="${escape(article.url)}" target="_blank" rel="noopener" class="selected-title-link">
-            <div class="selected-title">${escape(article.title)}</div>
+            <div class="selected-title">${escape(ideaTitle)}</div>
           </a>
+          ${ideaExcerpt ? `<div class="selected-excerpt">${escape(ideaExcerpt)}</div>` : ''}
           <a href="${escape(article.url)}" target="_blank" rel="noopener" class="card-source-link">
-            Læs original på ${escape(hostname)} ${ARROW_SVG}
+            Originalkilde: ${escape(hostname)} ${ARROW_SVG}
           </a>
         </div>
         ${draftBadge}
       </div>
+      ${isQueued || isGenerating ? `
+        <div class="selected-generation-status">
+          <span class="loader-dot-pulse"></span>
+          <span>${isQueued
+            ? 'Artiklen står i kø og starter automatisk, når den aktuelle generering er færdig.'
+            : 'Artiklen genereres i baggrunden. Du kan blive på siden eller arbejde videre imens.'}</span>
+        </div>
+      ` : ''}
+      ${isFailed ? `
+        <div class="selected-generation-status selected-generation-error">
+          Generering fejlede${generation?.error ? `: ${escape(generation.error)}` : ''}.
+        </div>
+      ` : ''}
       <div class="selected-angle" data-mode="view">
         <div class="selected-angle-header">
           <span class="selected-angle-label">Vinkel</span>
@@ -57,7 +88,8 @@ export function buildSelectedCard(
         </div>
       </div>
       <div class="selected-actions">
-        <button class="btn-keep" type="button" data-action="generate">${generateLabel}</button>
+        <button class="btn-keep" type="button" data-action="generate"${disabled}>${generateLabel}</button>
+        ${isQueued || isGenerating ? '<button class="btn-cancel" type="button" data-action="stop">Stop</button>' : ''}
         <button class="btn-ignore" type="button" data-action="return">Returner til inbox</button>
       </div>`;
 
@@ -95,10 +127,19 @@ export function buildSelectedCard(
       });
 
     card.querySelector<HTMLButtonElement>('[data-action="generate"]')!
-      .addEventListener('click', () => onGenerate(state.article.id));
+      .addEventListener('click', () => {
+        if (state.generation?.status === 'queued' || state.generation?.status === 'generating') return;
+        onGenerate(state.article.id);
+      });
+
+    card.querySelector<HTMLButtonElement>('[data-action="stop"]')
+      ?.addEventListener('click', () => onCancelGeneration(state.article.id));
 
     card.querySelector<HTMLButtonElement>('[data-action="return"]')!
       .addEventListener('click', () => {
+        if (state.generation?.status === 'queued' || state.generation?.status === 'generating') {
+          onCancelGeneration(state.article.id);
+        }
         removeSelected(state.article.id);
         card.remove();
         onChange();

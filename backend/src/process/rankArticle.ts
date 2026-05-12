@@ -15,6 +15,8 @@ export interface RankResult {
   breakdown: RelevanceBreakdown;
   summary: string;
   angle: string;
+  suggestedTitle: string;
+  suggestedExcerpt: string;
 }
 
 export async function rankArticle(article: Article): Promise<RankResult> {
@@ -85,7 +87,9 @@ Returner KUN dette JSON-format uden forklaring og uden markdown:
   "kildernes_trovaerdighed": <1-5>,
   "total": <sum>,
   "resume": "<2-3 sætninger om hvad artiklen handler om, til en redaktør>",
-  "anbefaling": "<én sætning om den bedste populærvidenskabelige vinkel>"
+  "anbefaling": "<én sætning om den bedste populærvidenskabelige vinkel>",
+  "foreslaaet_titel": "<kort, dansk, journalistisk arbejdstitel. Skriv den som en mulig artikeloverskrift, ikke som en oversættelse af kildens titel. Må ikke være på engelsk>",
+  "excerpt": "<1-2 korte danske sætninger som kunne bruges som teaser/underrubrik på den færdige artikel. Skriv læserrettet, ikke som analyse til redaktøren>"
 }
 `.trim();
 
@@ -149,6 +153,8 @@ function parseResponse(raw: string): RankResult {
     breakdown,
     summary: typeof parsed.resume === 'string' ? parsed.resume.trim() : '',
     angle: typeof parsed.anbefaling === 'string' ? parsed.anbefaling.trim() : '',
+    suggestedTitle: typeof parsed.foreslaaet_titel === 'string' ? parsed.foreslaaet_titel.trim() : '',
+    suggestedExcerpt: typeof parsed.excerpt === 'string' ? parsed.excerpt.trim() : '',
   };
 }
 

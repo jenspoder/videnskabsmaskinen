@@ -7,12 +7,21 @@ export interface SelectedArticle {
   article: Article;
   angle: string;
   selectedAt: string;
+  generation?: GenerationState;
 }
 
 export interface DraftRecord {
   articleId: string;
   html: string;
   generatedAt: string;
+}
+
+export interface GenerationState {
+  status: 'queued' | 'generating' | 'completed' | 'failed' | 'canceled';
+  jobId?: string;
+  startedAt?: string;
+  updatedAt?: string;
+  error?: string;
 }
 
 export function getSelected(): SelectedArticle[] {
@@ -26,8 +35,31 @@ export function isSelected(id: string): boolean {
 export function addSelected(article: Article, angle: string): void {
   const list = getSelected();
   if (list.some((s) => s.article.id === article.id)) return;
-  list.unshift({ article, angle, selectedAt: new Date().toISOString() });
+  list.unshift({
+    article,
+    angle,
+    selectedAt: new Date().toISOString(),
+    generation: {
+      status: 'queued',
+      updatedAt: new Date().toISOString(),
+    },
+  });
   writeJson(KEY_SELECTED, list);
+}
+
+export function setGenerationState(id: string, generation: GenerationState): SelectedArticle | null {
+  const list = getSelected();
+  const idx = list.findIndex((s) => s.article.id === id);
+  if (idx < 0) return null;
+  list[idx] = {
+    ...list[idx],
+    generation: {
+      ...generation,
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  writeJson(KEY_SELECTED, list);
+  return list[idx];
 }
 
 export function removeSelected(id: string): void {
@@ -61,6 +93,13 @@ export function saveDraft(articleId: string, html: string): DraftRecord {
   };
   filtered.unshift(record);
   writeJson(KEY_DRAFTS, filtered);
+  const selected = getSelected().find((s) => s.article.id === articleId);
+  if (selected) {
+    setGenerationState(articleId, {
+      ...(selected.generation ?? {}),
+      status: 'completed',
+    });
+  }
   return record;
 }
 

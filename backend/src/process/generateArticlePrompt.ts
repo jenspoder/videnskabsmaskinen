@@ -99,6 +99,8 @@ export interface GenerateUserMessageInput {
   teaser: string;
   url: string;
   angle: string;
+  suggestedTitle?: string | null;
+  suggestedExcerpt?: string | null;
   sourceDescription?: string;
   /**
    * Brødtekst hentet fra kildens URL af fetchArticleBody. Tom streng
@@ -118,6 +120,12 @@ export function buildGenerateUserMessage(input: GenerateUserMessageInput): strin
       ? 'Fuldtekst fra den bedst tilgængelige kilde.'
       : 'Kun titel og teaser/abstract er tilgængeligt.');
 
+  const suggestedTitle = input.suggestedTitle?.trim();
+  const suggestedExcerpt = input.suggestedExcerpt?.trim();
+  const articleIdeaSection = suggestedTitle || suggestedExcerpt
+    ? `\nARTIKELIDÉ FRA REDAKTIONELT FORARBEJDE\nDette er et redaktionelt udgangspunkt fra den indledende vurdering. Brug det som retning for titel, lede og fokus, men forbedr det hvis kildeteksten eller vinklen kræver det. Du må ikke opfinde fakta for at få idéen til at passe.\n${suggestedTitle ? `Foreslået titel: ${suggestedTitle}\n` : ''}${suggestedExcerpt ? `Foreslået teaser/underrubrik: ${suggestedExcerpt}\n` : ''}`
+    : '';
+
   const bodySection = input.body.trim()
     ? `\nTEKSTGRUNDLAG FOR GENERERING\n${sourceDescription}\n\n${input.body.trim()}\n`
     : `\nTEKSTGRUNDLAG FOR GENERERING\n${sourceDescription}\n\nBrug kun titel og teaser/abstract. Vær ekstra forsigtig med ikke at finde på detaljer, metodeafsnit, tal eller konklusioner der ikke fremgår af tekstgrundlaget.\n`;
@@ -128,6 +136,7 @@ KILDE
 Titel: ${input.title}
 Teaser/abstract: ${input.teaser || '(ingen teaser)'}
 URL: ${input.url}
+${articleIdeaSection}
 ${bodySection}
 REDAKTIONEL VINKEL
 ${angleSection}

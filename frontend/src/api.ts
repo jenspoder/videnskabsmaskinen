@@ -43,7 +43,7 @@ export async function processArticle(
 export interface GenerateDraftJob {
   jobId: string;
   articleId: string;
-  status: 'pending' | 'completed' | 'failed';
+  status: 'pending' | 'completed' | 'failed' | 'canceled';
   title?: string;
   sourceUrl?: string;
   angle?: string;
@@ -69,6 +69,10 @@ export async function getDraftJob(jobId: string): Promise<GenerateDraftJob> {
   return request<GenerateDraftJob>(`/jobs/${jobId}`);
 }
 
+export async function cancelDraftJob(jobId: string): Promise<GenerateDraftJob> {
+  return request<GenerateDraftJob>(`/jobs/${jobId}/cancel`, { method: 'POST' });
+}
+
 /**
  * Poller et generation-job til det er completed eller failed. Default
  * timeout er 90s med poll-interval på 2.5s. onProgress kaldes på hvert
@@ -86,7 +90,7 @@ export async function pollGenerateDraft(
     const job = await getDraftJob(jobId);
     options.onProgress?.(job);
 
-    if (job.status === 'completed' || job.status === 'failed') return job;
+    if (job.status === 'completed' || job.status === 'failed' || job.status === 'canceled') return job;
 
     if (Date.now() - start > timeout) {
       throw new Error(`Timeout efter ${Math.round(timeout / 1000)}s - jobbet kører stadig`);
@@ -108,6 +112,9 @@ export async function generateDraft(
   const job = await pollGenerateDraft(jobId, { onProgress });
   if (job.status === 'failed') {
     throw new Error(job.error ?? 'Generering fejlede uden fejlmeddelelse');
+  }
+  if (job.status === 'canceled') {
+    throw new Error(job.error ?? 'Generering blev stoppet');
   }
   return job;
 }

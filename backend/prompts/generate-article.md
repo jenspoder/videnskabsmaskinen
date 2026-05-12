@@ -115,6 +115,14 @@ Titel: {{TITLE}}
 Teaser/abstract: {{TEASER}}
 URL: {{URL}}
 
+ARTIKELIDÉ FRA REDAKTIONELT FORARBEJDE
+Dette er et redaktionelt udgangspunkt fra den indledende vurdering.
+Brug det som retning for titel, lede og fokus, men forbedr det hvis
+kildeteksten eller vinklen kræver det. Du må ikke opfinde fakta for at
+få idéen til at passe.
+Foreslået titel: {{SUGGESTED_TITLE}}
+Foreslået teaser/underrubrik: {{SUGGESTED_EXCERPT}}
+
 BRØDTEKST FRA KILDEARTIKLEN
 {{BODY}}
 
@@ -149,6 +157,8 @@ detaljer.)
 | `{{TITLE}}` | `article.title` (fra crawler)                            |
 | `{{TEASER}}`| `article.teaser` (renset af `cleanTeaser`)               |
 | `{{URL}}`   | `article.url`                                            |
+| `{{SUGGESTED_TITLE}}` | `article.suggestedTitle` fra ranking/pre-step. Sendes kun hvis feltet findes. |
+| `{{SUGGESTED_EXCERPT}}` | `article.suggestedExcerpt` fra ranking/pre-step. Sendes kun hvis feltet findes. |
 | `{{BODY}}`  | Brødtekst fra kildens URL via `fetchArticleBody`. Tom hvis sitet blokerer (fx 403 fra ScienceDirect) — så falder Bonzai tilbage til titel + teaser. |
 | `{{ANGLE}}` | Redaktørens vinkel fra Til behandling-viewet             |
 
