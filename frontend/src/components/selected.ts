@@ -89,7 +89,7 @@ export function buildSelectedCard(
       </div>
       <div class="selected-actions">
         <button class="btn-keep" type="button" data-action="generate"${disabled}>${generateLabel}</button>
-        ${isQueued || isGenerating ? '<button class="btn-cancel" type="button" data-action="stop">Stop</button>' : ''}
+        ${isQueued || isGenerating ? '<button class="btn-stop" type="button" data-action="stop">Stop generering</button>' : ''}
         <button class="btn-ignore" type="button" data-action="return">Returner til inbox</button>
       </div>`;
 
