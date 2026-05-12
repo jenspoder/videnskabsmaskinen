@@ -197,7 +197,7 @@ function buildDocumentCard(doc: UploadedDocument): HTMLElement {
       </div>
     </div>
     <button class="document-trash" type="button" aria-label="Fjern ${escapeHtml(doc.fileName)}" title="Fjern dokument">
-      <span class="document-trash-icon" aria-hidden="true"></span>
+      Slet
     </button>`;
 
   card.querySelector<HTMLButtonElement>('.document-trash')?.addEventListener('click', async () => {

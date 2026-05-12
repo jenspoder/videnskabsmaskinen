@@ -590,7 +590,7 @@
       padding: 0.12rem 0.45rem;
     }
     .document-trash {
-      width: 2.2rem;
+      min-width: 4.2rem;
       height: 2.2rem;
       display: inline-flex;
       align-items: center;
@@ -600,6 +600,10 @@
       background: transparent;
       color: rgba(255,255,255,0.72);
       cursor: pointer;
+      padding: 0 0.85rem;
+      font-size: 0.62rem;
+      font-weight: 600;
+      letter-spacing: 0.16rem;
       transition: color 0.18s, border-color 0.18s, background-color 0.18s;
       flex-shrink: 0;
     }
@@ -607,37 +611,6 @@
       color: #f87171;
       border-color: rgba(248,113,113,0.55);
       background-color: rgba(248,113,113,0.08);
-    }
-    .document-trash-icon {
-      width: 0.82rem;
-      height: 0.92rem;
-      display: block;
-      position: relative;
-      border: 1.8px solid currentColor;
-      border-top: 0;
-      border-radius: 0 0 2px 2px;
-      pointer-events: none;
-    }
-    .document-trash-icon::before {
-      content: '';
-      position: absolute;
-      left: -0.18rem;
-      top: -0.28rem;
-      width: 1.12rem;
-      height: 1.8px;
-      background-color: currentColor;
-      border-radius: 2px;
-    }
-    .document-trash-icon::after {
-      content: '';
-      position: absolute;
-      left: 0.23rem;
-      top: -0.5rem;
-      width: 0.34rem;
-      height: 0.18rem;
-      border: 1.8px solid currentColor;
-      border-bottom: 0;
-      border-radius: 2px 2px 0 0;
     }
     .page-btn {
       min-width: 2.2rem;
