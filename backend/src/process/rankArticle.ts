@@ -94,13 +94,24 @@ Returner KUN dette JSON-format uden forklaring og uden markdown:
 `.trim();
 
 function buildPrompt(article: Article, body: string): string {
-  const abstract = body || article.teaser || '(intet abstract tilgængeligt)';
+  const abstract = body || bestGenerationTeaser(article) || '(intet abstract tilgængeligt)';
   return `Artikel:
 - Titel: ${article.title}
 - Abstract: ${abstract}
 - Kilde-URL: ${article.url}
 
 Score artiklen og returner kun JSON.`;
+}
+
+function bestGenerationTeaser(article: Article): string {
+  const sourceType = article.openAccess?.contentSourceType;
+  if (
+    (sourceType === 'original_abstract' || sourceType === 'openalex_abstract' || sourceType === 'crossref_abstract') &&
+    article.openAccess?.contentText?.trim()
+  ) {
+    return article.openAccess.contentText.trim();
+  }
+  return article.teaser || '';
 }
 
 function pickBestSourceUrl(article: Article): string {

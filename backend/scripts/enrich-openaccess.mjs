@@ -138,10 +138,18 @@ async function processArticle(key, stats, index, total) {
   // Berig teaser hvis vi har et længere, brugbart abstract.
   const oldTeaserLen = (article.teaser || '').length;
   let teaserReplaced = false;
-  if (abstractText && abstractText.length > oldTeaserLen + 100) {
-    article.teaser = abstractText;
-    teaserReplaced = true;
-    stats.teaserReplaced++;
+  const usesAbstractAsContent =
+    oa.contentSourceType === 'original_abstract' ||
+    oa.contentSourceType === 'openalex_abstract' ||
+    oa.contentSourceType === 'crossref_abstract';
+  if (abstractText && usesAbstractAsContent) {
+    oa.contentText = abstractText;
+    oa.contentTextLength = abstractText.length;
+    if (abstractText.length > oldTeaserLen + 100) {
+      article.teaser = abstractText;
+      teaserReplaced = true;
+      stats.teaserReplaced++;
+    }
   }
 
   oa.hasOpenAlexAbstract = abstractSource === 'openalex';

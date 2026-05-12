@@ -3,7 +3,7 @@ import { saveDraft, getDraft } from '../store';
 import { generateMockDraft } from '../mockGenerate';
 import { generateDraft as generateDraftViaApi } from '../api';
 import type { GenerateDraftJob } from '../api';
-import { accessBucket } from '../utils/scoring';
+import { accessBucket, abstractLength } from '../utils/scoring';
 import type { Article } from '../types';
 
 export interface DraftViewCallbacks {
@@ -307,7 +307,7 @@ function escape(text: string): string {
 
 function buildQualityBanner(article: Article): string {
   const oa = article.openAccess;
-  const abstractLen = (article.teaser || '').replace(/\s+/g, ' ').trim().length;
+  const abstractLen = abstractLength(article);
   const host = oa?.oaUrl ? hostnameOf(oa.oaUrl) : null;
 
   let variant: string;

@@ -35,6 +35,7 @@ export interface OpenAccessInfo {
   contentSourceUrl?: string | null;
   contentSourceHost?: string | null;
   contentTextLength?: number;
+  contentText?: string | null;
   canGenerate?: boolean;
 }
 

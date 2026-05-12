@@ -143,7 +143,7 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2, id: string): 
   const { body: articleBody, sourceUrl } = await safeFetchBody(article);
   const htmlContent = await generateArticle({
     title: article.title,
-    teaser: article.teaser,
+    teaser: bestGenerationTeaser(article),
     url: sourceUrl,
     angle,
     suggestedTitle: article.suggestedTitle,
@@ -268,7 +268,7 @@ async function runGenerateDraftJob(payload: GenerateJobEvent): Promise<void> {
     const { body: articleBody, sourceUrl } = await safeFetchBody(article);
     const html = await generateArticle({
       title: article.title,
-      teaser: article.teaser,
+      teaser: bestGenerationTeaser(article),
       url: sourceUrl,
       angle,
       suggestedTitle: article.suggestedTitle,
@@ -377,6 +377,18 @@ function describeGenerationSource(article: { url: string; openAccess?: any }, fe
         ? 'Fuldtekst hentet fra kilden. Brug denne som primært grundlag.'
         : 'Der er ikke fundet brugbart tekstgrundlag ud over titel og teaser/abstract. Skriv meget forsigtigt.';
   }
+}
+
+function bestGenerationTeaser(article: { teaser: string; openAccess?: any }): string {
+  const sourceType = article.openAccess?.contentSourceType;
+  if (
+    (sourceType === 'original_abstract' || sourceType === 'openalex_abstract' || sourceType === 'crossref_abstract') &&
+    typeof article.openAccess?.contentText === 'string' &&
+    article.openAccess.contentText.trim()
+  ) {
+    return article.openAccess.contentText.trim();
+  }
+  return article.teaser || '';
 }
 
 function hostOf(url: string): string | null {
@@ -496,7 +508,7 @@ async function runCrawl(): Promise<CrawlResult> {
             sourceId: item.sourceId,
             title: item.title,
             url: item.url,
-            teaser: item.teaser,
+            teaser: pickBestTeaser(existing, item),
             status: 'new',
           });
           refreshedCount++;
@@ -532,4 +544,19 @@ async function runCrawl(): Promise<CrawlResult> {
     errors,
     updatedAt: now,
   };
+}
+
+function pickBestTeaser(existing: Article, incoming: Article): string {
+  const existingTeaser = existing.teaser || '';
+  const incomingTeaser = incoming.teaser || '';
+  const existingLen = existingTeaser.replace(/\s+/g, ' ').trim().length;
+  const incomingLen = incomingTeaser.replace(/\s+/g, ' ').trim().length;
+
+  // RSS-feeds kan kun indeholde metadata, mens enrichment har udvidet teaser
+  // med OpenAlex/Crossref/publisher-abstract. Behold den længste brugbare tekst.
+  if (existing.openAccess?.contentText && existing.openAccess.contentText.length > incomingLen + 100) {
+    return existing.openAccess.contentText;
+  }
+  if (existingLen > incomingLen + 100) return existingTeaser;
+  return incomingTeaser || existingTeaser;
 }
