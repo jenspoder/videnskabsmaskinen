@@ -31,6 +31,7 @@ export function buildInboxCard(
 
   const ratingHtml = buildRatingSummary(article);
   const accessInfoHtml = buildAccessInfo(article);
+  const originalTitleHtml = buildOriginalSourceTitle(article);
   const suggestedArticleHtml = buildSuggestedArticle(article);
   const summary = article.relevanceSummary?.trim() || '';
   const showSummary = summary && !suggestedArticleHtml;
@@ -42,7 +43,10 @@ export function buildInboxCard(
     : '';
   const breakdownHtml = buildBreakdown(article);
   const linksHtml = buildSourceLinks(article);
-  const sourceSectionHtml = buildCardSection('Kilde og adgang', `${accessInfoHtml}${linksHtml}`);
+  const sourceSectionHtml = buildCardSection(
+    'Kilde og adgang',
+    `${originalTitleHtml}${accessInfoHtml}${linksHtml}`
+  );
   const scoreSectionHtml = buildCardSection('Redaktionel vurdering', `${ratingHtml}${breakdownHtml}`);
 
   card.innerHTML = `
@@ -152,6 +156,20 @@ function buildSuggestedArticle(article: Article): string {
 function animateOut(card: HTMLElement, callback: () => void): void {
   card.classList.add('removing');
   setTimeout(callback, 360);
+}
+
+/** Kildens `article.title` vises før adgangsstatus under «Kilde og adgang». */
+function buildOriginalSourceTitle(article: Article): string {
+  const raw = article.title?.trim();
+  if (!raw) return '';
+  const suggested = article.suggestedTitle?.trim();
+  if (suggested && raw === suggested) return '';
+  const label = isUploadedDocument(article) ? 'Titel på kilden' : 'Originaltitel';
+  return `
+    <div class="card-original-source-title">
+      <span class="card-original-source-title-label">${escapeHtml(label)}</span>
+      <div class="card-original-source-title-text">${escapeHtml(raw)}</div>
+    </div>`;
 }
 
 function buildAccessInfo(article: Article): string {

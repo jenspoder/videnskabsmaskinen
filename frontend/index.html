@@ -867,6 +867,25 @@
       margin-top: 0;
     }
 
+    .card-original-source-title {
+      margin-bottom: 0.15rem;
+    }
+    .card-original-source-title-label {
+      display: block;
+      font-size: 0.58rem;
+      font-weight: 600;
+      letter-spacing: 0.16rem;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.38);
+      margin-bottom: 0.35rem;
+    }
+    .card-original-source-title-text {
+      font-size: 0.82rem;
+      line-height: 1.45;
+      color: rgba(255, 255, 255, 0.88);
+      font-weight: 500;
+    }
+
     .card-breakdown {
       display: flex;
       flex-wrap: wrap;
@@ -1646,14 +1665,14 @@
       </div>
     </div>
     <nav class="header-nav">
+      <a class="nav-link" id="nav-documents" onclick="showView('documents')">
+        Egne kilder <span class="nav-badge" id="documents-badge">—</span>
+      </a>
       <a class="nav-link active" id="nav-inbox" onclick="showView('inbox')">
         Inbox <span class="nav-badge" id="inbox-badge">—</span>
       </a>
       <a class="nav-link" id="nav-til-behandling" onclick="showView('til-behandling')">
         Udkast <span class="nav-badge" id="til-behandling-badge">—</span>
-      </a>
-      <a class="nav-link" id="nav-documents" onclick="showView('documents')">
-        Egne kilder <span class="nav-badge" id="documents-badge">—</span>
       </a>
       <a class="nav-link" id="nav-arkiv" onclick="showView('arkiv')">
         Arkiv <span class="nav-badge" id="arkiv-badge">—</span>
