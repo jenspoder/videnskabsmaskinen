@@ -20,8 +20,8 @@ import {
 import { crawlOneSource } from './crawler/crawlOneSource';
 import { crawlRssSource } from './crawler/crawlRssSource';
 import { generateArticle } from './process/bonzai';
+import { readerCitationUrl } from './process/generateArticlePrompt';
 import {
-  prepareWordPressArticleHtml,
   createWordPressDraft,
   isWordPressConfigured,
   publishWordPressPost,
@@ -319,8 +319,7 @@ async function handlePublishWordPress(event: APIGatewayProxyEventV2, id: string)
   const title = article.suggestedTitle?.trim() || article.title;
 
   try {
-    const htmlForWp = prepareWordPressArticleHtml(html, article);
-    const { id: wpId, link: postUrl } = await publishWordPressPost(title, htmlForWp, [categoryId]);
+    const { id: wpId, link: postUrl } = await publishWordPressPost(title, html, [categoryId]);
 
     article.status = 'published';
     article.publishedAt = new Date().toISOString();
@@ -357,6 +356,9 @@ async function handleProcessArticle(event: APIGatewayProxyEventV2, id: string): 
     suggestedExcerpt: article.suggestedExcerpt,
     sourceDescription: describeGenerationSource(article, articleBody.length),
     body: articleBody,
+    citationUrl: readerCitationUrl(article),
+    sourcePublishedAt: article.sourcePublishedAt ?? null,
+    discoveredAt: article.discoveredAt,
   });
   const wpId = await createWordPressDraft(article.title, htmlContent);
 
@@ -482,6 +484,9 @@ async function runGenerateDraftJob(payload: GenerateJobEvent): Promise<void> {
       suggestedExcerpt: article.suggestedExcerpt,
       sourceDescription: describeGenerationSource(article, articleBody.length),
       body: articleBody,
+      citationUrl: readerCitationUrl(article),
+      sourcePublishedAt: article.sourcePublishedAt ?? null,
+      discoveredAt: article.discoveredAt,
     });
 
     const stateBeforeSave = await loadJsonOrDefault<GenerateJobState | null>(jobKey(jobId), null);

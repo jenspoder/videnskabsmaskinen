@@ -5,12 +5,17 @@
  * som er den canonical reference redaktionen bruger til at opdatere prompten i
  * Bonzai-UI'en. Hvis du ændrer her, så opdater også .md-filen — og omvendt.
  *
+ * VIGTIGT (Vej B): Når BONZAI_MODEL er agent_* sendes kun **user message** til
+ * Bonzai — assistentens systeminstruktion i UI'en skal derfor spejle reglerne
+ * herunder (kopier fra generate-article.md).
+ *
  * Hvorfor inline i TS frem for runtime fs-read:
  * - Lambda bundler kun src/, ikke prompts/. Vi undgår SAM-bøvl.
  * - Type-checking fanger tomme strings.
  * - Hot path: ingen IO ved første kald.
  */
 
+import type { Article } from '../types';
 export const GENERATE_SYSTEM_PROMPT = `
 Du er en dygtig dansk videnskabsjournalist med solid faglig forståelse
 af psykologi og psykiatri. Du omsætter videnskabelige artikler til
@@ -74,6 +79,11 @@ Nyhedskriterier (vægt og indvinkling)
 Struktur og længde
 - Fængende, men faktuel overskrift.
 - Forklarende underrubrik (lede) på 1-3 sætninger.
+- I det første almindelige brødtekstafsnit efter lede (det første <p>
+  uden class="lede") skal du med naturlig nyhedsjournalistik knytte
+  artiklens bud til kilden — fx «ifølge …», «som forskerne beskriver i …»,
+  «i et studie publiceret i …». Det skal føles som en integreret del af
+  teksten (som i en klassisk nyhedscrawler), ikke et separat metadatafelt.
 - Mindst tre afsnit med selvstændige overskrifter.
 - I et af afsnittene: forklar i en bredere sammenhæng — trukket fra
   kildeartiklens egen introduktion eller diskussion — hvorfor det
@@ -82,15 +92,22 @@ Struktur og længde
 - Brug IKKE bulletlister eller punkttegn. Skriv sammenhængende prosa.
 
 Output-format
-Returner KUN ren HTML uden code fences eller markdown. Brug præcis
-disse tags:
+Returner KUN ren HTML uden code fences eller markdown. Brug disse tags:
 
 <h1>...</h1>                         (artiklens overskrift)
 <p class="lede"><em>...</em></p>     (underrubrik / lede)
 <h2>...</h2>                         (sektions-overskrift)
 <p>...</p>                           (almindeligt afsnit)
 
-Ingen <ul>, <ol>, <li>, <strong>, <div>, <section> eller andre tags.
+I det første <p> efter lede må du indsætte højst ét link til selve
+kildeartiklen for læseren, med præcis denne form:
+<a href="..." target="_blank" rel="noopener noreferrer">meningsfuld tekst</a>
+Href skal være præcis den URL der står som «Href til link i løbende tekst»
+i brugerbeskeden (når den findes). Linkteksten skal være naturlig (fx
+tidsskriftsnavn, forlag eller kort beskrivelse), aldrig kun «klik her».
+
+Ingen <ul>, <ol>, <li>, <strong>, <div>, <section>, <img>, <br> eller
+andre tags end de nævnte — undtagen det ene <a> som ovenfor.
 Ingen indledende «Her er artiklen:» — start direkte med <h1>.
 `.trim();
 
@@ -108,6 +125,32 @@ export interface GenerateUserMessageInput {
    * Bonzai tilbage til titel + teaser.
    */
   body: string;
+  /** https-URL til <a href> i første brødtekstafsnit (typisk original/forlag). */
+  citationUrl?: string;
+  /** ISO fra RSS pubDate når tilgængelig. */
+  sourcePublishedAt?: string | null;
+  /** ISO — fallback for dato i løbende tekst. */
+  discoveredAt?: string;
+}
+
+function formatDanishLongDate(iso: string | undefined | null): string {
+  if (!iso?.trim()) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('da-DK', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** Første brugbare https-URL til læserens klik (original, ellers OA/content). */
+export function readerCitationUrl(article: Pick<Article, 'url' | 'openAccess' | 'sourceType'>): string {
+  const primary = article.url?.trim() ?? '';
+  if (/^https?:\/\//i.test(primary) && !/^uploaded-document:/i.test(primary)) {
+    return primary;
+  }
+  const oa = article.openAccess?.oaUrl?.trim();
+  if (oa && /^https?:\/\//i.test(oa)) return oa;
+  const cs = article.openAccess?.contentSourceUrl?.trim();
+  if (cs && /^https?:\/\//i.test(cs)) return cs;
+  return '';
 }
 
 export function buildGenerateUserMessage(input: GenerateUserMessageInput): string {
@@ -130,14 +173,41 @@ export function buildGenerateUserMessage(input: GenerateUserMessageInput): strin
     ? `\nTEKSTGRUNDLAG FOR GENERERING\n${sourceDescription}\n\n${input.body.trim()}\n`
     : `\nTEKSTGRUNDLAG FOR GENERERING\n${sourceDescription}\n\nBrug kun titel og teaser/abstract. Vær ekstra forsigtig med ikke at finde på detaljer, metodeafsnit, tal eller konklusioner der ikke fremgår af tekstgrundlaget.\n`;
 
+  const hrefForCitation = (input.citationUrl?.trim() || input.url?.trim() || '').trim();
+  const datePrimary = formatDanishLongDate(input.sourcePublishedAt);
+  const dateFallback = formatDanishLongDate(input.discoveredAt);
+  const dateLine = datePrimary || dateFallback || 'ikke angivet';
+
+  const citationBlock = hrefForCitation
+    ? `
+KILDE I LØBENDE TEKST (obligatorisk — som i en nyhedsartikel)
+I det første almindelige <p>-afsnit efter lede og før første <h2> skal du
+naturligt integrere kilden i prosaen (fx «ifølge en undersøgelse i …»,
+«som beskrives i …», «i et studie publiceret …») — ikke som et separat
+metadatafelt.
+- Indsæt præcis ét klikbart link med:
+  <a href="${hrefForCitation}" target="_blank" rel="noopener noreferrer">meningsfuld linktekst</a>
+  Brug PRÆCIS denne href-streng (kopier tegn-for-tegn): ${hrefForCitation}
+- Arbejd kildedatoen ind i samme afsnit når det giver mening.
+  Kildedato til formulering: ${dateLine}
+  (Hvis kildedato ovenfor er «ikke angivet», undlad at opdigte en konkret kalenderdato.)
+`
+    : `
+KILDE I LØBENDE TEKST (obligatorisk)
+Der er ingen offentlig http(s)-URL til link. I det første <p> efter lede skal du
+alligevel naturligt henvise til kilden ved navn/titel — uden <a>-tag.
+- Kildedato til formulering: ${dateLine}
+`;
+
   return `Skriv én færdig populærvidenskabelig artikel baseret på følgende kilde og redaktionelle vinkel.
 
 KILDE
 Titel: ${input.title}
 Teaser/abstract: ${input.teaser || '(ingen teaser)'}
-URL: ${input.url}
+URL (til reference): ${input.url}
 ${articleIdeaSection}
 ${bodySection}
+${citationBlock}
 REDAKTIONEL VINKEL
 ${angleSection}
 

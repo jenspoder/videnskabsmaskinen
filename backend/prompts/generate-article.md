@@ -9,6 +9,10 @@ Prompten er bygget ud fra Kristoffer Frøkjærs prompt A (april 2026), let
 omformuleret til klart adskilte regler og parameteriseret med variabler
 som vores Lambda udfylder pr. artikel.
 
+**Vej B (Bonzai-assistent / `agent_…`):** Lambda sender kun **user
+message** — den fulde **system prompt** herunder skal derfor også ligge
+i assistentens instruktion i Bonzai-UI'en (hold den i sync med denne fil).
+
 ---
 
 ## System prompt
@@ -79,6 +83,11 @@ Nyhedskriterier (vægt og indvinkling)
 Struktur og længde
 - Fængende, men faktuel overskrift.
 - Forklarende underrubrik (lede) på 1-3 sætninger.
+- I det første almindelige brødtekstafsnit efter lede (det første <p>
+  uden class="lede") skal du med naturlig nyhedsjournalistik knytte
+  artiklens bud til kilden — fx «ifølge …», «som forskerne beskriver i …»,
+  «i et studie publiceret i …». Det skal føles som en integreret del af
+  teksten (som i en klassisk nyhedscrawler), ikke et separat metadatafelt.
 - Mindst tre afsnit med selvstændige overskrifter.
 - I et af afsnittene: forklar i en bredere sammenhæng — trukket fra
   kildeartiklens egen introduktion eller diskussion — hvorfor det
@@ -87,15 +96,22 @@ Struktur og længde
 - Brug IKKE bulletlister eller punkttegn. Skriv sammenhængende prosa.
 
 Output-format
-Returner KUN ren HTML uden code fences eller markdown. Brug præcis
-disse tags:
+Returner KUN ren HTML uden code fences eller markdown. Brug disse tags:
 
 <h1>...</h1>                         (artiklens overskrift)
 <p class="lede"><em>...</em></p>     (underrubrik / lede)
 <h2>...</h2>                         (sektions-overskrift)
 <p>...</p>                           (almindeligt afsnit)
 
-Ingen <ul>, <ol>, <li>, <strong>, <div>, <section> eller andre tags.
+I det første <p> efter lede må du indsætte højst ét link til selve
+kildeartiklen for læseren, med præcis denne form:
+<a href="..." target="_blank" rel="noopener noreferrer">meningsfuld tekst</a>
+Href skal være præcis den URL der står som «Href til link i løbende tekst»
+i brugerbeskeden (når den findes). Linkteksten skal være naturlig (fx
+tidsskriftsnavn, forlag eller kort beskrivelse), aldrig kun «klik her».
+
+Ingen <ul>, <ol>, <li>, <strong>, <div>, <section>, <img>, <br> eller
+andre tags end de nævnte — undtagen det ene <a> som ovenfor.
 Ingen indledende «Her er artiklen:» — start direkte med <h1>.
 ```
 
@@ -113,7 +129,7 @@ og redaktionelle vinkel.
 KILDE
 Titel: {{TITLE}}
 Teaser/abstract: {{TEASER}}
-URL: {{URL}}
+URL (til reference): {{URL}}
 
 ARTIKELIDÉ FRA REDAKTIONELT FORARBEJDE
 Dette er et redaktionelt udgangspunkt fra den indledende vurdering.
@@ -125,6 +141,11 @@ Foreslået teaser/underrubrik: {{SUGGESTED_EXCERPT}}
 
 BRØDTEKST FRA KILDEARTIKLEN
 {{BODY}}
+
+KILDE I LØBENDE TEKST
+(Lambda indsætter her en konkret instruktionsblok med «Href til link i
+løbende tekst» og «Kildedato til formulering» — kopieres ikke manuelt
+til Bonzai; den genereres pr. artikel i koden.)
 
 REDAKTIONEL VINKEL
 {{ANGLE}}
@@ -156,11 +177,12 @@ detaljer.)
 |-------------|----------------------------------------------------------|
 | `{{TITLE}}` | `article.title` (fra crawler)                            |
 | `{{TEASER}}`| `article.teaser` (renset af `cleanTeaser`)               |
-| `{{URL}}`   | `article.url`                                            |
+| `{{URL}}`   | Den URL der blev brugt til tekstudtræk (`sourceUrl` fra `safeFetchBody`) |
 | `{{SUGGESTED_TITLE}}` | `article.suggestedTitle` fra ranking/pre-step. Sendes kun hvis feltet findes. |
 | `{{SUGGESTED_EXCERPT}}` | `article.suggestedExcerpt` fra ranking/pre-step. Sendes kun hvis feltet findes. |
 | `{{BODY}}`  | Brødtekst fra kildens URL via `fetchArticleBody`. Tom hvis sitet blokerer (fx 403 fra ScienceDirect) — så falder Bonzai tilbage til titel + teaser. |
 | `{{ANGLE}}` | Redaktørens vinkel fra Til behandling-viewet             |
+| *(automatisk blok)* | Efter brødtekst indsætter Lambda **KILDE I LØBENDE TEKST** med præcis `href` (`readerCitationUrl(article)`) og dato (`sourcePublishedAt` fra RSS, ellers `discoveredAt`). |
 
 Hvis kildedata udvides senere (referencesektion, forfattere, DOI),
 tilføjes nye variabler her og i user message-skabelonen samt i
