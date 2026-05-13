@@ -158,18 +158,13 @@ function animateOut(card: HTMLElement, callback: () => void): void {
   setTimeout(callback, 360);
 }
 
-/** Kildens `article.title` vises før adgangsstatus under «Kilde og adgang». */
+/** Kildens `article.title` vises uden ekstra label, samme tekststørrelse som artikelidé-titlen. */
 function buildOriginalSourceTitle(article: Article): string {
   const raw = article.title?.trim();
   if (!raw) return '';
   const suggested = article.suggestedTitle?.trim();
   if (suggested && raw === suggested) return '';
-  const label = isUploadedDocument(article) ? 'Titel på kilden' : 'Originaltitel';
-  return `
-    <div class="card-original-source-title">
-      <span class="card-original-source-title-label">${escapeHtml(label)}</span>
-      <div class="card-original-source-title-text">${escapeHtml(raw)}</div>
-    </div>`;
+  return `<div class="card-suggestion-title">${escapeHtml(raw)}</div>`;
 }
 
 function buildAccessInfo(article: Article): string {
