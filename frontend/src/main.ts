@@ -5,7 +5,7 @@ import { buildInboxCard } from './components/inbox';
 import { buildArchiveCard } from './components/archive';
 import { buildSelectedCard } from './components/selected';
 import { renderDraftView } from './components/draft';
-import { addSelected, getDraft, getSelected, isSelected, saveDraft, setGenerationState } from './store';
+import { addSelected, getDraft, getSelected, isSelected, removeSelected, saveDraft, setGenerationState } from './store';
 import { accessBucket, brugbarhedScore, isGeneratable, isUploadedDocument, type AccessBucket } from './utils/scoring';
 import { generateMockDraft } from './mockGenerate';
 
@@ -419,6 +419,13 @@ function openDraft(id: string): void {
   renderDraftView(draftContainer, sel, {
     onBack: () => {
       showView('til-behandling');
+    },
+    onPublished: () => {
+      removeSelected(id);
+      showView('til-behandling');
+      void renderInbox();
+      void refreshBadges();
+      refreshSelectedView();
     },
   });
 

@@ -160,6 +160,28 @@ Når flagget er sat, kalder draft-viewet backend'en og viser en spinner
 med en tæller mens jobbet kører. Statusbadgen skifter fra
 *Demo-udkast* til *Bonzai-udkast*.
 
+`VITE_API_URL` skal også være sat, hvis knappen **Send til WordPress** skal kunne aktiveres efter generering.
+
+## WordPress (psykesundhed.dk)
+
+**Application password og bruger må aldrig ligge i Git, i frontenden eller i chat.** De skal kun sættes som **miljøvariabler på Lambda-funktionen** `videnskabsmaskinen-api` (AWS Console → Lambda → Configuration → Environment variables), eller via **AWS Systems Manager Parameter Store** hvis I vil have rotation og strengere adgang.
+
+| Variabel | Eksempel | Formål |
+|----------|-----------|--------|
+| `WORDPRESS_URL` | `https://psykesundhed.dk` | Ingen afsluttende `/` |
+| `WORDPRESS_USER` | WordPress-brugernavnet som app-password’et hører til | Basic auth |
+| `WORDPRESS_APP_PASSWORD` | Den genererede app-adgangskode **uden mellemrum** | Basic auth |
+| `WORDPRESS_CATEGORY_SLUG` | (valgfri) Standard: `ny-viden` | Finder kategori-id til **Ny viden** |
+| `WORDPRESS_CATEGORY_ID` | (valgfri) Fx `42` | Hvis slug-opslag fejler, sæt id direkte |
+
+Efter deploy: **Send til WordPress** i udkast-view kalder `POST /articles/{id}/publish-wordpress` med det gemte HTML-udkast og opretter et **offentligt** indlæg (`status: publish`) i den angivne kategori.
+
+Opdater også Lambda-koden efter ændringer i `backend/`:
+
+```bash
+cd backend && rm -f function.zip && npm run package && aws lambda update-function-code --function-name videnskabsmaskinen-api --region eu-west-1 --zip-file fileb://function.zip
+```
+
 ## IAM-permission til self-invoke
 
 Lambda-execution-rollen skal have `lambda:InvokeFunction` på sig selv,
@@ -187,3 +209,5 @@ aws iam put-role-policy --role-name $ROLE --policy-name AllowSelfAsyncInvoke \
 | `error: "Agent not found"` | Forkert `BONZAI_MODEL` (assistant-id er korrekt format men eksisterer ikke for keyen) — tjek med `GET /assistants/assistants` |
 | `error: "Access to agents is disabled for your role"` | API-keyen er en project key, ikke personal. Bonzai's Assistants API kræver personal key i dag |
 | Frontend timeout efter 180s | Bonzai er overbelastet eller assistant-prompten genererer ekstremt langt output. Tjek `GET /jobs/{id}` direkte for at se om jobbet faktisk fortsætter — hvis det færdiggøres senere, er HTML'en stadig i S3 |
+| `502` fra `publish-wordpress` om kategori | Kategorien findes ikke med slug `ny-viden`. Opret den i WP eller sæt `WORDPRESS_CATEGORY_ID` |
+| `401`/`403` ved WordPress | Forkert bruger/app-password, eller brugeren mangler rettighed til at oprette indlæg via REST API |

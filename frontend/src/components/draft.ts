@@ -1,16 +1,19 @@
 import type { SelectedArticle } from '../store';
 import { saveDraft, getDraft } from '../store';
 import { generateMockDraft } from '../mockGenerate';
-import { generateDraft as generateDraftViaApi } from '../api';
+import { generateDraft as generateDraftViaApi, publishWordPress } from '../api';
 import type { GenerateDraftJob } from '../api';
 import { accessBucket, abstractLength, isUploadedDocument } from '../utils/scoring';
 import type { Article } from '../types';
 
 export interface DraftViewCallbacks {
   onBack: () => void;
+  /** Kald efter vellykket WordPress-udgivelse (fjern fra kø, navigér, opdatér lister). */
+  onPublished?: () => void;
 }
 
 const USE_BACKEND = import.meta.env.VITE_USE_BACKEND_GENERATION === 'true';
+const CAN_PUBLISH = Boolean((import.meta.env.VITE_API_URL as string | undefined)?.trim());
 
 type LoaderStage = 'fetching' | 'generating' | 'rendering';
 
@@ -37,6 +40,24 @@ function pickStatus(elapsedSec: number): string {
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => window.setTimeout(resolve, ms));
+
+function syncWordPressPublishUi(wrapper: HTMLElement, article: Article): void {
+  const btn = wrapper.querySelector<HTMLButtonElement>('[data-action="publish"]');
+  const wrap = wrapper.querySelector<HTMLElement>('.wp-button-wrapper');
+  if (!btn || !wrap) return;
+
+  const draftHtml = getDraft(article.id)?.html?.trim();
+  const can = CAN_PUBLISH && Boolean(draftHtml);
+  btn.disabled = !can;
+
+  if (!CAN_PUBLISH) {
+    wrap.dataset.tooltip = 'Sæt VITE_API_URL i frontend-buildet så knappen kan kalde API’et.';
+  } else if (!draftHtml) {
+    wrap.dataset.tooltip = 'Generér et udkast først — derefter kan du udgive direkte på psykesundhed.dk under Ny viden.';
+  } else {
+    wrap.dataset.tooltip = 'Udgiver som offentligt indlæg under kategorien Ny viden (psykesundhed.dk).';
+  }
+}
 
 const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' &&
@@ -182,8 +203,8 @@ export function renderDraftView(
       <button class="btn-cancel" data-action="back">← Tilbage</button>
       <div class="draft-toolbar-right">
         <button class="btn-cancel" data-action="regenerate">Generer igen</button>
-        <span class="wp-button-wrapper" data-tooltip="Sender til WordPress kræver Bonzai- og WordPress-credentials i Lambda. Ikke opsat endnu.">
-          <button class="btn-keep" data-action="publish" disabled>Send til WordPress</button>
+        <span class="wp-button-wrapper" data-tooltip="">
+          <button class="btn-keep" type="button" data-action="publish" disabled>Send til WordPress</button>
         </span>
       </div>
     </div>
@@ -209,6 +230,7 @@ export function renderDraftView(
   `;
 
   container.appendChild(wrapper);
+  syncWordPressPublishUi(wrapper, article);
   const body = wrapper.querySelector<HTMLElement>('#draft-body')!;
   const regenerateBtn = wrapper.querySelector<HTMLButtonElement>('[data-action="regenerate"]')!;
 
@@ -234,55 +256,78 @@ export function renderDraftView(
   };
 
   const generate = async (force: boolean): Promise<void> => {
-    if (!force) {
-      const existing = getDraft(article.id);
-      if (existing) {
-        renderHtmlInstant(existing.html);
+    try {
+      if (!force) {
+        const existing = getDraft(article.id);
+        if (existing) {
+          renderHtmlInstant(existing.html);
+          return;
+        }
+      }
+
+      if (!USE_BACKEND) {
+        const mock = generateMockDraft(article, angle);
+        saveDraft(article.id, mock);
+        await renderHtmlAnimated(mock);
         return;
       }
-    }
 
-    if (!USE_BACKEND) {
-      const mock = generateMockDraft(article, angle);
-      saveDraft(article.id, mock);
-      await renderHtmlAnimated(mock);
-      return;
-    }
-
-    regenerateBtn.disabled = true;
-    const startedAt = Date.now();
-    const loader = showLoader(body);
-    const tick = window.setInterval(() => {
-      const sec = Math.round((Date.now() - startedAt) / 1000);
-      loader.update(sec, 'generating');
-    }, 1000);
-
-    try {
-      const onProgress = (_job: GenerateDraftJob): void => {
+      regenerateBtn.disabled = true;
+      const startedAt = Date.now();
+      const loader = showLoader(body);
+      const tick = window.setInterval(() => {
         const sec = Math.round((Date.now() - startedAt) / 1000);
         loader.update(sec, 'generating');
-      };
-      const result = await generateDraftViaApi(article.id, angle, onProgress);
-      const html = result.html ?? '';
-      saveDraft(article.id, html);
+      }, 1000);
 
-      window.clearInterval(tick);
-      const sec = Math.round((Date.now() - startedAt) / 1000);
-      loader.update(sec, 'rendering');
-      await sleep(350);
+      try {
+        const onProgress = (_job: GenerateDraftJob): void => {
+          const sec = Math.round((Date.now() - startedAt) / 1000);
+          loader.update(sec, 'generating');
+        };
+        const result = await generateDraftViaApi(article.id, angle, onProgress);
+        const html = result.html ?? '';
+        saveDraft(article.id, html);
 
-      await renderHtmlAnimated(html);
-    } catch (error) {
-      window.clearInterval(tick);
-      const message = error instanceof Error ? error.message : 'Ukendt fejl';
-      showError(message);
+        window.clearInterval(tick);
+        const sec = Math.round((Date.now() - startedAt) / 1000);
+        loader.update(sec, 'rendering');
+        await sleep(350);
+
+        await renderHtmlAnimated(html);
+      } catch (error) {
+        window.clearInterval(tick);
+        const message = error instanceof Error ? error.message : 'Ukendt fejl';
+        showError(message);
+      } finally {
+        window.clearInterval(tick);
+        regenerateBtn.disabled = false;
+      }
     } finally {
-      window.clearInterval(tick);
-      regenerateBtn.disabled = false;
+      syncWordPressPublishUi(wrapper, article);
     }
   };
 
   void generate(false);
+
+  const publishBtn = wrapper.querySelector<HTMLButtonElement>('[data-action="publish"]')!;
+  publishBtn.addEventListener('click', async () => {
+    const record = getDraft(article.id);
+    if (!record?.html?.trim()) {
+      alert('Ingen udkast-HTML at publicere. Generér artiklen først.');
+      return;
+    }
+    publishBtn.disabled = true;
+    try {
+      const res = await publishWordPress(article.id, record.html);
+      window.open(res.postUrl, '_blank', 'noopener,noreferrer');
+      callbacks.onPublished?.();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Publicering til WordPress fejlede.');
+    } finally {
+      syncWordPressPublishUi(wrapper, article);
+    }
+  });
 
   wrapper.querySelector<HTMLButtonElement>('[data-action="back"]')!
     .addEventListener('click', () => callbacks.onBack());

@@ -51,6 +51,16 @@ export async function patchArticle(
   });
 }
 
+export async function publishWordPress(
+  id: string,
+  html: string
+): Promise<{ wordpressPostId: number; postUrl: string; article: Article }> {
+  return request(`/articles/${id}/publish-wordpress`, {
+    method: 'POST',
+    body: JSON.stringify({ html }),
+  });
+}
+
 export async function processArticle(
   id: string,
   angle: string

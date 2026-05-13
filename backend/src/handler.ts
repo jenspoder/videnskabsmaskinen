@@ -20,7 +20,12 @@ import {
 import { crawlOneSource } from './crawler/crawlOneSource';
 import { crawlRssSource } from './crawler/crawlRssSource';
 import { generateArticle } from './process/bonzai';
-import { createWordPressDraft } from './process/wordpress';
+import {
+  createWordPressDraft,
+  isWordPressConfigured,
+  publishWordPressPost,
+  resolvePublishCategoryId,
+} from './process/wordpress';
 import { rankArticle } from './process/rankArticle';
 import { fetchArticleBody } from './process/fetchArticleBody';
 import { Article, SourcesStore, CrawlResult, UploadedDocument } from './types';
@@ -106,6 +111,7 @@ export async function handler(event: any): Promise<any> {
 
     if (method === 'PATCH' && id && !subPath) return handlePatchArticle(e, id);
     if (method === 'POST' && id && subPath === '/process') return handleProcessArticle(e, id);
+    if (method === 'POST' && id && subPath === '/publish-wordpress') return handlePublishWordPress(e, id);
     if (method === 'POST' && id && subPath === '/generate-draft') return handleGenerateDraft(e, id);
     if (method === 'POST' && id && subPath === '/rank') return handleRankArticle(id);
 
@@ -271,6 +277,58 @@ async function handlePatchArticle(event: APIGatewayProxyEventV2, id: string): Pr
 
   await moveArticle(id, from, article);
   return json(200, article);
+}
+
+async function handlePublishWordPress(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
+  if (!isWordPressConfigured()) {
+    return json(503, {
+      error: 'WordPress er ikke konfigureret. Sæt WORDPRESS_URL, WORDPRESS_USER og WORDPRESS_APP_PASSWORD på Lambda.',
+    });
+  }
+
+  let body: { html?: string };
+  try {
+    body = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    return json(400, { error: 'Ugyldig JSON' });
+  }
+
+  const html = typeof body.html === 'string' ? body.html : '';
+  if (!html.trim()) {
+    return json(400, { error: 'Mangler feltet html med artiklens HTML-indhold.' });
+  }
+
+  let article = await loadArticle(id, 'inbox');
+  let from: 'inbox' | 'reviewed' = 'inbox';
+  if (!article) {
+    article = await loadArticle(id, 'reviewed');
+    from = 'reviewed';
+  }
+  if (!article) return json(404, { error: 'Artikel ikke fundet' });
+
+  const categoryId = await resolvePublishCategoryId();
+  if (categoryId == null) {
+    return json(502, {
+      error:
+        'Kunne ikke finde udgivelseskategorien i WordPress. Opret «Ny viden» med slug «ny-viden», eller sæt WORDPRESS_CATEGORY_ID til kategoriens numeriske id.',
+    });
+  }
+
+  const title = article.suggestedTitle?.trim() || article.title;
+
+  try {
+    const { id: wpId, link: postUrl } = await publishWordPressPost(title, html, [categoryId]);
+
+    article.status = 'published';
+    article.publishedAt = new Date().toISOString();
+    article.wordpressPostId = wpId;
+    await moveArticle(id, from, article);
+
+    return json(200, { wordpressPostId: wpId, postUrl, article });
+  } catch (err) {
+    console.error('WordPress publish error:', err);
+    return json(502, { error: err instanceof Error ? err.message : 'WordPress-udgivelse fejlede' });
+  }
 }
 
 async function handleProcessArticle(event: APIGatewayProxyEventV2, id: string): Promise<APIGatewayProxyResultV2> {
