@@ -49,6 +49,8 @@ export interface Article {
   url: string;
   teaser: string;
   discoveredAt: string;
+  /** ISO 8601 fra RSS `<pubDate>` når tilgængelig — til kilde-dato ved udgivelse. */
+  sourcePublishedAt?: string | null;
   status: 'new' | 'ignored' | 'processing' | 'published';
   angle: string;
   reviewedAt: string | null;

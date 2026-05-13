@@ -21,6 +21,7 @@ import { crawlOneSource } from './crawler/crawlOneSource';
 import { crawlRssSource } from './crawler/crawlRssSource';
 import { generateArticle } from './process/bonzai';
 import {
+  prepareWordPressArticleHtml,
   createWordPressDraft,
   isWordPressConfigured,
   publishWordPressPost,
@@ -185,6 +186,7 @@ async function handleUploadDocument(event: APIGatewayProxyEventV2): Promise<APIG
     url: `uploaded-document://${id}`,
     teaser: text,
     discoveredAt: now,
+    sourcePublishedAt: now,
     status: 'new',
     angle: '',
     reviewedAt: null,
@@ -317,7 +319,8 @@ async function handlePublishWordPress(event: APIGatewayProxyEventV2, id: string)
   const title = article.suggestedTitle?.trim() || article.title;
 
   try {
-    const { id: wpId, link: postUrl } = await publishWordPressPost(title, html, [categoryId]);
+    const htmlForWp = prepareWordPressArticleHtml(html, article);
+    const { id: wpId, link: postUrl } = await publishWordPressPost(title, htmlForWp, [categoryId]);
 
     article.status = 'published';
     article.publishedAt = new Date().toISOString();
@@ -792,6 +795,7 @@ async function runCrawl(): Promise<CrawlResult> {
             title: item.title,
             url: item.url,
             teaser: pickBestTeaser(existing, item),
+            sourcePublishedAt: item.sourcePublishedAt ?? existing.sourcePublishedAt ?? null,
             status: 'new',
           });
           refreshedCount++;

@@ -43,6 +43,13 @@ function parseItem(itemXml: string, source: SourceConfig): Article | null {
   const description = extractTag(itemXml, 'description');
   const teaser = cleanTeaser(stripHtml(description)).slice(0, 5000);
 
+  const pubRaw = extractTag(itemXml, 'pubDate').trim();
+  let sourcePublishedAt: string | null = null;
+  if (pubRaw) {
+    const ms = Date.parse(pubRaw);
+    if (!Number.isNaN(ms)) sourcePublishedAt = new Date(ms).toISOString();
+  }
+
   return {
     id: '',
     customerId: source.customerId,
@@ -51,6 +58,7 @@ function parseItem(itemXml: string, source: SourceConfig): Article | null {
     url,
     teaser,
     discoveredAt: '',
+    sourcePublishedAt,
     status: 'new',
     angle: '',
     reviewedAt: null,
